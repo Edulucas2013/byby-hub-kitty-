@@ -560,5 +560,90 @@ DetectTab:CreateToggle({
     end
 })
 
+-- Dentro da TAB Detect's (após o código existente)
+
+-- Detect Exit
+local detectExitEnabled = false
+local exitDetectionConnection = nil
+local targetExitCFrame = CFrame.new(-546.133056640625, 140.72021484375, -367.26898193359375)
+local originalExitData = {
+    CFrame = CFrame.new(-539.952271, 144.300217, -366.584259, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+    Rotation = Vector3.new(0, 0, 0),
+    PivotOffset = CFrame.new(0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1)
+}
+
+local function checkExitChanges()
+    local doorFolder = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("House")
+                    and workspace.Map.House:FindFirstChild("Interacts")
+    
+    if doorFolder then
+        local doors = doorFolder:GetChildren()
+        local targetDoor = #doors >= 19 and doors[19]
+        
+        if targetDoor and targetDoor:FindFirstChild("Model") then
+            local basePart = targetDoor.Model:FindFirstChild("Base")
+            if basePart and basePart:IsA("BasePart") then
+                -- Verificar alterações
+                if basePart.CFrame ~= originalExitData.CFrame or
+                   basePart.Rotation ~= originalExitData.Rotation or
+                   basePart.PivotOffset ~= originalExitData.PivotOffset then
+                   
+                    -- Teleportar jogador
+                    local plr = game.Players.LocalPlayer
+                    if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                        plr.Character.HumanoidRootPart.CFrame = targetExitCFrame
+                        Rayfield:Notify({
+                            Title = "EXIT ALTERADO!",
+                            Content = "Teleportado para as coordenadas seguras",
+                            Duration = 3,
+                            Image = 4483362458
+                        })
+                    end
+                end
+            end
+        end
+    end
+end
+
+DetectTab:CreateToggle({
+    Name = "Detect Exit",
+    CurrentValue = false,
+    Callback = function(value)
+        if value then
+            if getgenv().bybyHubSelectedChapter ~= 1 then
+                Rayfield:Notify({
+                    Title = "Erro",
+                    Content = "Selecione o Chap 1 ESP primeiro!",
+                    Duration = 4,
+                    Image = 4483362458
+                })
+                return
+            end
+            
+            detectExitEnabled = true
+            exitDetectionConnection = game:GetService("RunService").Heartbeat:Connect(function()
+                pcall(checkExitChanges)
+            end)
+            Rayfield:Notify({
+                Title = "Detect Exit Ativado",
+                Content = "Monitorando alterações no Exit do Chap 1",
+                Duration = 3,
+                Image = 4483362458
+            })
+        else
+            detectExitEnabled = false
+            if exitDetectionConnection then
+                exitDetectionConnection:Disconnect()
+            end
+            Rayfield:Notify({
+                Title = "Detect Exit Desativado",
+                Content = "Parou de monitorar o Exit",
+                Duration = 3,
+                Image = 4483362458
+            })
+        end
+    end
+})
+
 -- Load configuration
 Rayfield:LoadConfiguration()
