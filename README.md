@@ -352,110 +352,148 @@ TPsTab:CreateInput({
 local DetectsTab = Window:CreateTab("Detect's", 4483362458)
 
 -- Variável de controle do loop
+-- Criar variáveis de controle
 local detectionRunning = false
+local horizontalStuds = 20
+local verticalUp = 8
+local verticalDown = 5
 
--- Função de verificação de proximidade
+-- Área segura e backup de posição
+local safeZone = Vector3.new(332.3166, 4255.6064, 1042.434)
+local originalPosition = nil
+local isInSafe = false
+local dangerDetected = false
+local dangerCooldown = 0
+
+-- Sliders para controle de distância
+DetectsTab:CreateSlider({
+    Name = "Distância Horizontal (Studs)",
+    Range = {5, 50},
+    Increment = 1,
+    CurrentValue = 20,
+    Callback = function(v)
+        horizontalStuds = v
+    end
+})
+
+DetectsTab:CreateSlider({
+    Name = "Altura pra Cima (Studs)",
+    Range = {1, 30},
+    Increment = 1,
+    CurrentValue = 8,
+    Callback = function(v)
+        verticalUp = v
+    end
+})
+
+DetectsTab:CreateSlider({
+    Name = "Altura pra Baixo (Studs)",
+    Range = {1, 30},
+    Increment = 1,
+    CurrentValue = 5,
+    Callback = function(v)
+        verticalDown = v
+    end
+})
+
+-- Função de detecção
 local function startKittyDetection()
     local Players = game:GetService("Players")
     local LocalPlayer = Players.LocalPlayer
     local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     local HRP = Character:WaitForChild("HumanoidRootPart")
 
-    local originalPosition = nil
-    local safeZone = Vector3.new(332.3166, 4255.6064, 1042.434)
-    local dangerDetected = false
-    local dangerTimeout = 0
-
     task.spawn(function()
         while detectionRunning do
+            local foundKitty = false
             local mapPlayers = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Players")
-            local isDangerNow = false
 
             if mapPlayers then
                 for _, model in ipairs(mapPlayers:GetChildren()) do
-                    if model:IsA("Model") then
-                        local head = model:FindFirstChild("Head")
-                        local root = model:FindFirstChild("HumanoidRootPart")
-
-                        if head and root then
-                            local motorCount = 0
-                            for _, obj in ipairs(head:GetChildren()) do
-                                if obj:IsA("Motor6D") then
-                                    motorCount = motorCount + 1
-                                end
+                    local head = model:FindFirstChild("Head")
+                    local root = model:FindFirstChild("HumanoidRootPart")
+                    if model:IsA("Model") and head and root then
+                        -- Verificar 4 Motor6D
+                        local motors = 0
+                        for _, obj in ipairs(head:GetChildren()) do
+                            if obj:IsA("Motor6D") then
+                                motors += 1
                             end
+                        end
 
-                            if motorCount == 4 then
-                                local distVec = HRP.Position - root.Position
-                                local flatDistance = Vector3.new(distVec.X, 0, distVec.Z).Magnitude
-                                local verticalDistance = math.abs(distVec.Y)
+                        if motors == 4 then
+                            local offset = HRP.Position - root.Position
+                            local flat = Vector3.new(offset.X, 0, offset.Z).Magnitude
+                            local vertical = offset.Y
 
-                                if flatDistance < 20 and verticalDistance < 8 then
-                                    isDangerNow = true
-                                    break
-                                end
+                            if flat <= horizontalStuds and vertical <= verticalUp and vertical >= -verticalDown then
+                                foundKitty = true
+                                break
                             end
                         end
                     end
                 end
             end
 
-            -- Se perigo detectado, teleporta
-            if isDangerNow and not dangerDetected then
+            -- Teleporte se detectar perigo
+            if foundKitty and not isInSafe then
                 originalPosition = HRP.CFrame
                 HRP.CFrame = CFrame.new(safeZone)
                 Rayfield:Notify({
                     Title = "Kitty Detectado!",
-                    Content = "Kitty próximo e no mesmo andar. Teleportando!",
+                    Content = "Teleportando para posição segura.",
                     Duration = 3,
                     Image = 4483362458
                 })
+                isInSafe = true
                 dangerDetected = true
-                dangerTimeout = 0
+                dangerCooldown = 0
             end
 
-            -- Se perigo sumiu, contar tempo para retornar
-            if dangerDetected and not isDangerNow then
-                dangerTimeout += 0.1
-                if dangerTimeout >= 2 then -- 2 segundos depois do perigo
-                    dangerDetected = false
-                    dangerTimeout = 0
-                    if originalPosition then
-                        HRP.CFrame = originalPosition
-                        Rayfield:Notify({
-                            Title = "Kitty foi embora!",
-                            Content = "Retornando para sua posição original.",
-                            Duration = 3,
-                            Image = 4483362458
-                        })
-                        originalPosition = nil
-                    end
+            -- Se estava em perigo e agora não está
+            if isInSafe and not foundKitty then
+                dangerCooldown += 0.1
+                if dangerCooldown >= 2 then
+                    HRP.CFrame = originalPosition
+                    Rayfield:Notify({
+                        Title = "Perigo passou!",
+                        Content = "Voltando para posição original.",
+                        Duration = 3,
+                        Image = 4483362458
+                    })
+                    isInSafe = false
+                    dangerCooldown = 0
+                    originalPosition = nil
                 end
             end
+
+            if foundKitty and isInSafe then
+            dangerCooldown = 0 -- resetar apenas se voltou o perigo
+        end
 
             task.wait(0.1)
         end
     end)
 end
 
--- Toggle para ligar/desligar
+-- Toggle Liga/Desliga
 DetectsTab:CreateToggle({
-    Name = "Auto Detect Kitty (Proximidade)",
+    Name = "Auto Detect Kitty (com ajuste)",
     CurrentValue = false,
     Callback = function(state)
         detectionRunning = state
         if state then
             Rayfield:Notify({
-                Title = "Detector Ativado",
-                Content = "Procurando Kitty a cada 100ms...",
+                Title = "Detecção Ligada",
+                Content = "A cada 100ms com limites definidos.",
                 Duration = 3,
                 Image = 4483362458
             })
             startKittyDetection()
         else
             Rayfield:Notify({
-                Title = "Detector Desativado",
-                Content = "Parando a verificação.",
+                Title = "Detecção Desligada",
+                Content = "Parou de procurar Kitty.",
                 Duration = 3,
                 Image = 4483362458
             })
