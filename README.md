@@ -356,34 +356,37 @@ AntisTab:CreateButton({
     Name = "Anti-attack",
     Callback = function()
         local ReplicatedStorage = game:GetService("ReplicatedStorage")
-        local attackRemote = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Attack")
+        local attackRemote = ReplicatedStorage:FindFirstChild("Events")
+            and ReplicatedStorage.Events:FindFirstChild("Attack")
 
-        -- Verifica se o RemoteEvent de ataque existe
         if attackRemote and attackRemote:IsA("RemoteEvent") then
-            -- Sobrescreve o método OnServerEvent do RemoteEvent
-            attackRemote.OnServerEvent = function() 
-                -- Não faz nada quando o RemoteEvent é chamado
+            -- 1) Sobrescreve o método FireServer para não enviar nada ao servidor
+            attackRemote.FireServer = function() 
+                -- bloqueado
             end
+
+            -- 2) (Opcional) Remove completamente o RemoteEvent do jogo local
+            -- attackRemote:Destroy()
         else
-            Rayfield:Notify({
+            return Rayfield:Notify({
                 Title = "Erro",
-                Content = "O RemoteEvent 'Attack' não foi encontrado!",
+                Content = "RemoteEvent 'Attack' não encontrado!",
                 Duration = 5,
                 Image = 4483362458
             })
-            return
         end
 
-        -- Desativa scripts que tenham "attack" no nome
+        -- Desativa qualquer Script/LocalScript com "attack" no nome
         for _, obj in ipairs(game:GetDescendants()) do
-            if (obj:IsA("Script") or obj:IsA("LocalScript")) and string.lower(obj.Name):find("attack") then
+            if (obj:IsA("Script") or obj:IsA("LocalScript"))
+               and string.find(string.lower(obj.Name), "attack", 1, true) then
                 obj.Disabled = true
             end
         end
 
         Rayfield:Notify({
             Title = "Anti-attack Ativado",
-            Content = "RemoteEvent e scripts de ataque foram bloqueados!",
+            Content = "FireServer bloqueado e scripts de ataque desativados!",
             Duration = 5,
             Image = 4483362458
         })
