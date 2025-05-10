@@ -351,62 +351,54 @@ TPsTab:CreateInput({
 -- Criar aba "Detect's"
 local DetectsTab = Window:CreateTab("Detect's", 4483362458)
 
--- Configurações
-local detectionRunning = false
-local detectionLoop = nil
-
+-- Configurações padrão
 local horizontalStuds = 20
 local verticalUp = 8
 local verticalDown = 5
 
--- Ajustes do usuário
+-- Sliders ajustáveis
 DetectsTab:CreateSlider({
     Name = "Distância Horizontal",
-    Range = {1, 50},
-    Increment = 1,
-    CurrentValue = horizontalStuds,
+    Range = {1, 50}, Increment = 1, CurrentValue = horizontalStuds,
     Callback = function(v) horizontalStuds = v end
 })
 DetectsTab:CreateSlider({
     Name = "Altura pra Cima",
-    Range = {1, 30},
-    Increment = 1,
-    CurrentValue = verticalUp,
+    Range = {1, 30}, Increment = 1, CurrentValue = verticalUp,
     Callback = function(v) verticalUp = v end
 })
 DetectsTab:CreateSlider({
     Name = "Altura pra Baixo",
-    Range = {1, 30},
-    Increment = 1,
-    CurrentValue = verticalDown,
+    Range = {1, 30}, Increment = 1, CurrentValue = verticalDown,
     Callback = function(v) verticalDown = v end
 })
 
--- Variáveis do sistema
+-- Estado da lógica
+local detectionRunning = false
 local safePos = Vector3.new(332.3166, 4255.6064, 1042.434)
 local originalPos = nil
 local isInSafe = false
-local dangerTimeout = 0
+local cooldown = 0
 
--- Função principal
-local function runDetection()
+-- Loop da detecção
+local function startDetectionLoop()
     local Players = game:GetService("Players")
     local LocalPlayer = Players.LocalPlayer
     local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     local HRP = Character:WaitForChild("HumanoidRootPart")
 
-    detectionLoop = task.spawn(function()
+    task.spawn(function()
         while detectionRunning do
-            local danger = false
             local mapPlayers = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Players")
+            local danger = false
 
             if mapPlayers then
-                for _, model in pairs(mapPlayers:GetChildren()) do
+                for _, model in ipairs(mapPlayers:GetChildren()) do
                     local head = model:FindFirstChild("Head")
                     local root = model:FindFirstChild("HumanoidRootPart")
 
                     if head and root and model:IsA("Model") then
-                        -- Verifica se é Kitty
+                        -- Verifica se é “Kitty”
                         local motors = 0
                         for _, obj in ipairs(head:GetChildren()) do
                             if obj:IsA("Motor6D") then motors += 1 end
@@ -414,12 +406,13 @@ local function runDetection()
 
                         if motors == 4 then
                             local offset = HRP.Position - root.Position
-                            local flatDist = Vector3.new(offset.X, 0, offset.Z).Magnitude
-                            local verticalDist = offset.Y
+                            local flat = Vector3.new(offset.X, 0, offset.Z).Magnitude
+                            local vertical = offset.Y
 
-                            print(string.format("[DEBUG] Modelo: %s | Flat: %.2f | Vertical: %.2f", model.Name, flatDist, verticalDist))
+                            -- Debug visual
+                            print(string.format("[DEBUG] %s | Flat: %.2f | Vertical: %.2f", model.Name, flat, vertical))
 
-                            if flatDist <= horizontalStuds and verticalDist <= verticalUp and verticalDist >= -verticalDown then
+                            if flat <= horizontalStuds and vertical <= verticalUp and vertical >= -verticalDown then
                                 danger = true
                                 break
                             end
@@ -428,32 +421,33 @@ local function runDetection()
                 end
             end
 
-            -- Lógica de TP
+            -- TP ao detectar perigo
             if danger and not isInSafe then
                 originalPos = HRP.CFrame
                 HRP.CFrame = CFrame.new(safePos)
                 isInSafe = true
-                dangerTimeout = 0
+                cooldown = 0
                 Rayfield:Notify({
-                    Title = "Kitty Próximo!",
-                    Content = "Teleportando para lugar seguro!",
-                    Duration = 3,
-                    Image = 4483362458
+                    Title = "Kitty Detectado!",
+                    Content = "Teleportando para local seguro.",
+                    Duration = 2
                 })
-            elseif not danger and isInSafe then
-                dangerTimeout += 0.1
-                if dangerTimeout >= 2 then
+            end
+
+            -- Voltar à posição original após 2s sem perigo
+            if isInSafe and not danger then
+                cooldown += 0.1
+                if cooldown >= 2 then
                     HRP.CFrame = originalPos
                     isInSafe = false
+                    cooldown = 0
+                    originalPos = nil
                     Rayfield:Notify({
-                        Title = "Kitty Foi Embora",
-                        Content = "Voltando ao local original.",
-                        Duration = 3,
-                        Image = 4483362458
+                        Title = "Seguro!",
+                        Content = "Retornando para sua posição.",
+                        Duration = 2
                     })
                 end
-            elseif danger == false and isInSafe == false then
-                dangerTimeout = 0
             end
 
             task.wait(0.1)
@@ -463,15 +457,15 @@ end
 
 -- Toggle
 DetectsTab:CreateToggle({
-    Name = "Auto Detect Kitty (Refinado)",
+    Name = "Auto Detect Kitty (Versão Estável)",
     CurrentValue = false,
     Callback = function(state)
         detectionRunning = state
         if state then
-            Rayfield:Notify({ Title = "Detecção Ativada", Content = "Procurando Kitty...", Duration = 3 })
-            runDetection()
+            Rayfield:Notify({ Title = "Detector Ativado", Content = "Monitorando Kitty...", Duration = 2 })
+            startDetectionLoop()
         else
-            Rayfield:Notify({ Title = "Detecção Desligada", Content = "Parando monitoramento.", Duration = 2 })
+            Rayfield:Notify({ Title = "Detector Desativado", Content = "Monitoramento parado.", Duration = 2 })
         end
     end
 })
