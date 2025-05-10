@@ -361,9 +361,16 @@ local function startKittyDetection()
     local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     local HRP = Character:WaitForChild("HumanoidRootPart")
 
+    local originalPosition = nil
+    local safeZone = Vector3.new(332.3166, 4255.6064, 1042.434)
+    local dangerDetected = false
+    local dangerTimeout = 0
+
     task.spawn(function()
         while detectionRunning do
             local mapPlayers = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Players")
+            local isDangerNow = false
+
             if mapPlayers then
                 for _, model in ipairs(mapPlayers:GetChildren()) do
                     if model:IsA("Model") then
@@ -371,7 +378,6 @@ local function startKittyDetection()
                         local root = model:FindFirstChild("HumanoidRootPart")
 
                         if head and root then
-                            -- Verifica se tem exatamente 4 Motor6D no Head
                             local motorCount = 0
                             for _, obj in ipairs(head:GetChildren()) do
                                 if obj:IsA("Motor6D") then
@@ -380,24 +386,54 @@ local function startKittyDetection()
                             end
 
                             if motorCount == 4 then
-                                local dist = (HRP.Position - root.Position).Magnitude
-                                if dist < 20 then
-                                    -- Teleportar para local seguro
-                                    HRP.CFrame = CFrame.new(332.3166, 4255.6064, 1042.434)
-                                    Rayfield:Notify({
-                                        Title = "Kitty Detectado!",
-                                        Content = "Kitty próximo! Teleporte de emergência executado.",
-                                        Duration = 3,
-                                        Image = 4483362458
-                                    })
-                                    break -- evita múltiplos TPs
+                                local distVec = HRP.Position - root.Position
+                                local flatDistance = Vector3.new(distVec.X, 0, distVec.Z).Magnitude
+                                local verticalDistance = math.abs(distVec.Y)
+
+                                if flatDistance < 20 and verticalDistance < 8 then
+                                    isDangerNow = true
+                                    break
                                 end
                             end
                         end
                     end
                 end
             end
-            task.wait(0.1) -- 100ms
+
+            -- Se perigo detectado, teleporta
+            if isDangerNow and not dangerDetected then
+                originalPosition = HRP.CFrame
+                HRP.CFrame = CFrame.new(safeZone)
+                Rayfield:Notify({
+                    Title = "Kitty Detectado!",
+                    Content = "Kitty próximo e no mesmo andar. Teleportando!",
+                    Duration = 3,
+                    Image = 4483362458
+                })
+                dangerDetected = true
+                dangerTimeout = 0
+            end
+
+            -- Se perigo sumiu, contar tempo para retornar
+            if dangerDetected and not isDangerNow then
+                dangerTimeout += 0.1
+                if dangerTimeout >= 2 then -- 2 segundos depois do perigo
+                    dangerDetected = false
+                    dangerTimeout = 0
+                    if originalPosition then
+                        HRP.CFrame = originalPosition
+                        Rayfield:Notify({
+                            Title = "Kitty foi embora!",
+                            Content = "Retornando para sua posição original.",
+                            Duration = 3,
+                            Image = 4483362458
+                        })
+                        originalPosition = nil
+                    end
+                end
+            end
+
+            task.wait(0.1)
         end
     end)
 end
