@@ -478,15 +478,15 @@ DetectTab:CreateToggle({
 })
 
 -- Configurações
-local DETECTION_RANGE = 3  -- Distância de ativação
-local FORWARD_OFFSET = 5   -- Studs para frente
-local HEIGHT_OFFSET = 2    -- Studs para cima
+local DETECTION_RANGE = 3   -- Distância de ativação
+local FORWARD_OFFSET = 10   -- 10 studs para frente
+local HEIGHT_OFFSET = 2     -- 2 studs de altura
 
 -- Variáveis de controle
 local trapEvasionEnabled = false
 local lastEvasionTime = 0
 
--- Função principal ajustada
+-- Função principal corrigida
 local function evadeTraps()
     while trapEvasionEnabled do
         task.wait(0.1)
@@ -505,16 +505,16 @@ local function evadeTraps()
                         and workspace.Map.Traps.Trap:FindFirstChild("Base")
         
         if trapBase then
-            -- Cálculo de direção e distância
+            -- Cálculo de direção CORRIGIDA
             local trapPosition = trapBase.Position
             local playerPosition = rootPart.Position
             local distance = (playerPosition - trapPosition).Magnitude
             
             -- Ativar se dentro do alcance
             if distance <= DETECTION_RANGE and (tick() - lastEvasionTime) > 1.5 then
-                -- Calcular direção PARA FRENTE (relativo à trap)
-                local forwardDirection = (playerPosition - trapPosition).Unit
-                local targetPosition = trapPosition + (forwardDirection * FORWARD_OFFSET) 
+                -- Direção CORRETA: Trap -> Jogador
+                local trapForward = (playerPosition - trapPosition).Unit
+                local targetPosition = trapPosition + (trapForward * FORWARD_OFFSET) 
                                       + Vector3.new(0, HEIGHT_OFFSET, 0)
                 
                 -- Teleportar
@@ -522,11 +522,11 @@ local function evadeTraps()
                     rootPart.CFrame = CFrame.new(targetPosition)
                 end)
                 
-                -- Atualizar estado
+                -- Feedback
                 lastEvasionTime = tick()
                 Rayfield:Notify({
-                    Title = "TELETRANSPORTE REALIZADO",
-                    Content = "Nova posição: "..math.floor(targetPosition.X)..", "..math.floor(targetPosition.Z),
+                    Title = "TELETRANSPORTE EFETUADO",
+                    Content = "10 studs à frente da trap!",
                     Duration = 1.5,
                     Image = 4483362458
                 })
@@ -535,24 +535,24 @@ local function evadeTraps()
     end
 end
 
--- Toggle finalizado
+-- Toggle final
 DetectTab:CreateToggle({
-    Name = "Passar pela Trap →",
+    Name = "Detect trap",
     CurrentValue = false,
     Callback = function(value)
         trapEvasionEnabled = value
         if value then
             coroutine.wrap(evadeTraps)()
             Rayfield:Notify({
-                Title = "MODO DE PASSAGEM ATIVO",
-                Content = "Teleportando 5 studs à frente da trap!",
+                Title = "MODO DE TRAVESSIA",
+                Content = "Ativado: 10 studs à frente",
                 Duration = 3,
                 Image = 4483362458
             })
         else
             Rayfield:Notify({
-                Title = "MODO DESATIVADO",
-                Content = "Sistema interrompido",
+                Title = "SISTEMA DESLIGADO",
+                Content = "Ultrapassagem automática desativada",
                 Duration = 3,
                 Image = 4483362458
             })
