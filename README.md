@@ -478,56 +478,57 @@ DetectTab:CreateToggle({
 })
 
 -- Variáveis de controle
-local trapDetectionEnabled = false
-local lastJumpTime = 0
+local trapEvasionEnabled = false
+local lastEvasionTime = 0
 
--- Função para simular pressionar a tecla SPACE
-local function simulateSpacePress()
-    local virtualInput = game:GetService("VirtualInputManager")
-    virtualInput:SendKeyEvent(true, Enum.KeyCode.Space, false, nil)
-    task.wait(0.1)
-    virtualInput:SendKeyEvent(false, Enum.KeyCode.Space, false, nil)
+-- Função para calcular posição segura
+local function getEvadePosition(trapPosition, playerPosition)
+    -- Calcular direção oposta (normalizada)
+    local direction = (playerPosition - trapPosition).Unit
+    -- Distância de segurança (5 studs para trás + 3 de altura)
+    return trapPosition + (direction * 5) + Vector3.new(0, 3, 0)
 end
 
 -- Função principal de detecção
-local function checkForTraps()
-    while trapDetectionEnabled do
-        task.wait(0.1)
+local function evadeTraps()
+    while trapEvasionEnabled do
+        task.wait(0.15) -- Verificação mais rápida
         
         -- Verificação do jogador
         local player = game.Players.LocalPlayer
         if not player or not player.Character then continue end
         
-        -- Componentes essenciais
-        local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
         local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
-        if not humanoid or not rootPart then continue end
+        if not rootPart then continue end
 
-        -- Localização da trap específica
-        local trap = workspace:FindFirstChild("Map") and
-                     workspace.Map:FindFirstChild("Traps") and
-                     workspace.Map.Traps:FindFirstChild("Trap")
+        -- Localização hierárquica da trap
+        local trap = workspace:FindFirstChild("Map") 
+                     and workspace.Map:FindFirstChild("Traps") 
+                     and workspace.Map.Traps:FindFirstChild("Trap")
         
         if trap then
-            -- Verificação da estrutura completa
             local trapRoot = trap:FindFirstChild("HumanoidRootPart")
-            local basePart = trapRoot and trapRoot:FindFirstChild("Base")
-            local weld = basePart and basePart:FindFirstChild("WeldConstraint")
-
-            if weld then
+            if trapRoot then
                 -- Cálculo de distância
-                local trapPosition = trapRoot.Position
-                local distance = (rootPart.Position - trapPosition).Magnitude
+                local distance = (rootPart.Position - trapRoot.Position).Magnitude
                 
-                -- Lógica do pulo
-                if distance <= 3 and (tick() - lastJumpTime) > 1.5 then
-                    simulateSpacePress()  -- Pressiona SPACE
-                    lastJumpTime = tick()
+                -- Ativar evasão se dentro do raio e com cooldown
+                if distance <= 3 and (tick() - lastEvasionTime) > 2 then
+                    -- Calcular posição segura
+                    local safeCFrame = CFrame.new(
+                        getEvadePosition(trapRoot.Position, rootPart.Position)
+                    )
                     
-                    -- Feedback visual
+                    -- Teleportar com verificação de segurança
+                    pcall(function()
+                        rootPart.CFrame = safeCFrame
+                    end)
+                    
+                    -- Atualizar timers e feedback
+                    lastEvasionTime = tick()
                     Rayfield:Notify({
-                        Title = "PULO AUTOMÁTICO",
-                        Content = "Trap detectada a "..math.floor(distance).." studs!",
+                        Title = "EVASÃO AUTOMÁTICA",
+                        Content = "Teletransporte realizado!",
                         Duration = 1,
                         Image = 4483362458
                     })
@@ -539,22 +540,22 @@ end
 
 -- Criação do toggle
 DetectTab:CreateToggle({
-    Name = "Detect Trap's",
+    Name = "Detect Traps",
     CurrentValue = false,
     Callback = function(value)
-        trapDetectionEnabled = value
+        trapEvasionEnabled = value
         if value then
-            coroutine.wrap(checkForTraps)()
+            coroutine.wrap(evadeTraps)()
             Rayfield:Notify({
-                Title = "SISTEMA ATIVADO",
-                Content = "Pulo automático via tecla SPACE habilitado!",
+                Title = "MODO EVASÃO ATIVO",
+                Content = "Teletransportando quando próximo à trap!",
                 Duration = 3,
                 Image = 4483362458
             })
         else
             Rayfield:Notify({
-                Title = "SISTEMA DESATIVADO",
-                Content = "Pulo automático desligado",
+                Title = "MODO EVASÃO DESATIVADO",
+                Content = "Sistema de evasão desligado",
                 Duration = 3,
                 Image = 4483362458
             })
