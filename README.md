@@ -348,87 +348,82 @@ TPsTab:CreateInput({
     end
 })
 
--- Nova aba "Detect's"
-local DetectTab = Window:CreateTab("detect's", 4483362458)
-
--- Função para verificar direção e distância
-local function isKittyThreat(kittyHead, playerHRP)
-    local dirToPlayer = (playerHRP.Position - kittyHead.Position).Unit
-    local kittyLookVector = kittyHead.CFrame.LookVector
-    local dot = kittyLookVector:Dot(dirToPlayer)
-    local distance = (playerHRP.Position - kittyHead.Position).Magnitude
-    return dot > 0.75 and distance < 20 -- olhando e perto
-end
-
--- Detecta e Teleporta se necessário
 -- Criar aba "Detect's"
 local DetectsTab = Window:CreateTab("Detect's", 4483362458)
 
--- Adicionar botão "Detect Kitty"
-DetectsTab:CreateButton({
-    Name = "Detect Kitty",
-    Callback = function()
-        local Players = game:GetService("Players")
-        local LocalPlayer = Players.LocalPlayer
-        local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-        local HRP = Character:WaitForChild("HumanoidRootPart")
+-- Variável de controle do loop
+local detectionRunning = false
 
-        local function isKittyModel(model)
-            local head = model:FindFirstChild("Head")
-            if not head then return false end
-            local motors = 0
-            for _, obj in ipairs(head:GetChildren()) do
-                if obj:IsA("Motor6D") then
-                    motors = motors + 1
-                end
-            end
-            return motors == 4
-        end
+-- Função de verificação de proximidade
+local function startKittyDetection()
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local HRP = Character:WaitForChild("HumanoidRootPart")
 
-        local function isLookingAtYou(kittyHead)
-            local lookVector = kittyHead.CFrame.LookVector
-            local toPlayer = (HRP.Position - kittyHead.Position).Unit
-            return lookVector:Dot(toPlayer) > 0.85
-        end
-
-        local function detectAndTeleport()
-            local found = false
+    task.spawn(function()
+        while detectionRunning do
             local mapPlayers = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Players")
-            if not mapPlayers then return end
+            if mapPlayers then
+                for _, model in ipairs(mapPlayers:GetChildren()) do
+                    if model:IsA("Model") then
+                        local head = model:FindFirstChild("Head")
+                        local root = model:FindFirstChild("HumanoidRootPart")
 
-            for _, model in ipairs(mapPlayers:GetChildren()) do
-                if model:IsA("Model") and isKittyModel(model) then
-                    local head = model:FindFirstChild("Head")
-                    local root = model:FindFirstChild("HumanoidRootPart")
-                    if head and root then
-                        local dist = (HRP.Position - root.Position).Magnitude
-                        if dist < 20 and isLookingAtYou(head) then
-                            found = true
-                            break
+                        if head and root then
+                            -- Verifica se tem exatamente 4 Motor6D no Head
+                            local motorCount = 0
+                            for _, obj in ipairs(head:GetChildren()) do
+                                if obj:IsA("Motor6D") then
+                                    motorCount = motorCount + 1
+                                end
+                            end
+
+                            if motorCount == 4 then
+                                local dist = (HRP.Position - root.Position).Magnitude
+                                if dist < 20 then
+                                    -- Teleportar para local seguro
+                                    HRP.CFrame = CFrame.new(332.3166, 4255.6064, 1042.434)
+                                    Rayfield:Notify({
+                                        Title = "Kitty Detectado!",
+                                        Content = "Kitty próximo! Teleporte de emergência executado.",
+                                        Duration = 3,
+                                        Image = 4483362458
+                                    })
+                                    break -- evita múltiplos TPs
+                                end
+                            end
                         end
                     end
                 end
             end
-
-            if found then
-                HRP.CFrame = CFrame.new(332.3166198730469, 4255.6064453125, 1042.4339599609375)
-                Rayfield:Notify({
-                    Title = "Kitty Detectado!",
-                    Content = "Kitty está te olhando e perto! Teleporte de emergência!",
-                    Duration = 4,
-                    Image = 4483362458
-                })
-            else
-                Rayfield:Notify({
-                    Title = "Seguro",
-                    Content = "Nenhum Kitty próximo te olhando agora.",
-                    Duration = 3,
-                    Image = 4483362458
-                })
-            end
+            task.wait(0.1) -- 100ms
         end
+    end)
+end
 
-        detectAndTeleport()
+-- Toggle para ligar/desligar
+DetectsTab:CreateToggle({
+    Name = "Auto Detect Kitty (Proximidade)",
+    CurrentValue = false,
+    Callback = function(state)
+        detectionRunning = state
+        if state then
+            Rayfield:Notify({
+                Title = "Detector Ativado",
+                Content = "Procurando Kitty a cada 100ms...",
+                Duration = 3,
+                Image = 4483362458
+            })
+            startKittyDetection()
+        else
+            Rayfield:Notify({
+                Title = "Detector Desativado",
+                Content = "Parando a verificação.",
+                Duration = 3,
+                Image = 4483362458
+            })
+        end
     end
 })
 
