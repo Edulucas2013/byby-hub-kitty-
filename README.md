@@ -353,14 +353,45 @@ local DetectTab = Window:CreateTab("Detect's", 4483362458)
 
 local detectingKitty = false
 local detectionLoop = nil
-local lastSafePosition = nil
-local isEvading = false
-local detectionRange = 25  -- Studs aumentados para 25
-local cooldown = 5  -- Segundos de espera antes de retornar
+local cooldown = false
+local detectionRange = 25  -- Distância aumentada
 
--- Função de detecção aprimorada
+-- Função de teleporte aprimorada
+local function safeTeleport(cframe)
+    local plr = game.Players.LocalPlayer
+    if plr and plr.Character then
+        local humanoid = plr.Character:FindFirstChildOfClass("Humanoid")
+        local root = plr.Character:FindFirstChild("HumanoidRootPart")
+        
+        if root then
+            -- Congelar personagem
+            if humanoid then
+                humanoid.PlatformStand = true
+            end
+            
+            -- Teleportar elevado para evitar queda
+            local safeCFrame = cframe + Vector3.new(0, 5, 0)
+            root.CFrame = safeCFrame
+            
+            -- Manter posição fixa
+            local bodyVelocity = Instance.new("BodyVelocity")
+            bodyVelocity.Velocity = Vector3.new(0,0,0)
+            bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            bodyVelocity.Parent = root
+            
+            -- Restaurar após 1 segundo
+            task.wait(1)
+            bodyVelocity:Destroy()
+            if humanoid then
+                humanoid.PlatformStand = false
+            end
+        end
+    end
+end
+
+-- Função de detecção simplificada
 local function startDetection()
-    local targetPos = Vector3.new(332.3166198730469, 4255.6064453125, 1042.4339599609375)
+    local targetPos = CFrame.new(332.3166198730469, 4255.6064453125, 1042.4339599609375)
     local plr = game.Players.LocalPlayer
     
     -- Valores de tamanho da cabeça
@@ -370,79 +401,50 @@ local function startDetection()
         1.7666665315628052
     )
     
-    -- Verificador de Kitty
-    local function isValidKitty(char)
-        local head = char:FindFirstChild("Head")
-        return head and head.Size == validSize
-    end
-
-    -- Loop de detecção
     detectionLoop = game:GetService("RunService").Heartbeat:Connect(function()
-        if not detectingKitty then return end
+        if not detectingKitty or cooldown then return end
         
-        -- Verificar se está em modo de evasão
-        if isEvading then
-            local allClear = true
-            
-            -- Verificar BOTs
-            local botFolder = game.Workspace.Map:FindFirstChild("Players")
-            if botFolder then
-                for _, bot in ipairs(botFolder:GetChildren()) do
-                    if bot.Name == "BOT" and isValidKitty(bot) then
-                        local distance = (bot.HumanoidRootPart.Position - lastSafePosition).Magnitude
-                        if distance <= detectionRange then
-                            allClear = false
-                            break
-                        end
+        local currentPos = plr.Character.HumanoidRootPart.Position
+        local originalPosition = plr.Character.HumanoidRootPart.CFrame
+        
+        -- Verificar todos os alvos
+        local function checkTarget(target)
+            if target:FindFirstChild("HumanoidRootPart") then
+                local root = target.HumanoidRootPart
+                local head = target:FindFirstChild("Head")
+                
+                if head and head.Size == validSize then
+                    local distance = (currentPos - root.Position).Magnitude
+                    local lookVector = root.CFrame.LookVector
+                    local toPlayer = (currentPos - root.Position).Unit
+                    local dotProduct = lookVector:Dot(toPlayer)
+                    
+                    if distance <= detectionRange and dotProduct > 0.85 then
+                        cooldown = true
+                        
+                        -- Primeiro teleporte
+                        safeTeleport(targetPos)
+                        
+                        -- Esperar 5 segundos
+                        task.wait(5)
+                        
+                        -- Teleporte de volta
+                        safeTeleport(originalPosition)
+                        
+                        -- Resetar cooldown
+                        task.wait(1)
+                        cooldown = false
                     end
                 end
             end
-
-            -- Verificar Players
-            if allClear then
-                for _, player in ipairs(game.Players:GetPlayers()) do
-                    if player ~= plr and player.Character and isValidKitty(player.Character) then
-                        local distance = (player.Character.HumanoidRootPart.Position - lastSafePosition).Magnitude
-                        if distance <= detectionRange then
-                            allClear = false
-                            break
-                        end
-                    end
-                end
-            end
-
-            -- Retornar para posição segura
-            if allClear then
-                task.wait(cooldown)  -- Espera adicional de segurança
-                teleportTo(lastSafePosition, "Retornando para posição segura!")
-                isEvading = false
-                lastSafePosition = nil
-            end
-            
-            return
         end
 
-        -- Modo de detecção normal
-        local currentPos = plr.Character.HumanoidRootPart.Position
-        
         -- Verificar BOTs
-        if game.Workspace.Map:FindFirstChild("Players") then
-            for _, bot in ipairs(game.Workspace.Map.Players:GetChildren()) do
-                if bot.Name == "BOT" and bot:FindFirstChild("HumanoidRootPart") then
-                    if isValidKitty(bot) then
-                        local root = bot.HumanoidRootPart
-                        local distance = (currentPos - root.Position).Magnitude
-                        local lookVector = root.CFrame.LookVector
-                        local toPlayer = (currentPos - root.Position).Unit
-                        local dotProduct = lookVector:Dot(toPlayer)
-                        
-                        if distance <= detectionRange and dotProduct > 0.85 then
-                            lastSafePosition = currentPos
-                            teleportTo(targetPos, "Kitty detectado! Teleportando...")
-                            isEvading = true
-                            return
-                        end
-                    end
+        local botFolder = game.Workspace.Map:FindFirstChild("Players")
+        if botFolder then
+            for _, bot in ipairs(botFolder:GetChildren()) do
+                if bot.Name == "BOT" then
+                    checkTarget(bot)
                 end
             end
         end
@@ -450,21 +452,7 @@ local function startDetection()
         -- Verificar Players
         for _, player in ipairs(game.Players:GetPlayers()) do
             if player ~= plr and player.Character then
-                local char = player.Character
-                if char:FindFirstChild("HumanoidRootPart") and isValidKitty(char) then
-                    local root = char.HumanoidRootPart
-                    local distance = (currentPos - root.Position).Magnitude
-                    local lookVector = root.CFrame.LookVector
-                    local toPlayer = (currentPos - root.Position).Unit
-                    local dotProduct = lookVector:Dot(toPlayer)
-                    
-                    if distance <= detectionRange and dotProduct > 0.85 then
-                        lastSafePosition = currentPos
-                        teleportTo(targetPos, "Kitty Player detectado! Teleportando...")
-                        isEvading = true
-                        return
-                    end
-                end
+                checkTarget(player.Character)
             end
         end
     end)
@@ -479,25 +467,12 @@ DetectTab:CreateToggle({
         detectingKitty = value
         if value then
             startDetection()
-            Rayfield:Notify({
-                Title = "Detector Ativado",
-                Content = "Monitoramento de Kitties iniciado",
-                Duration = 2,
-                Image = 4483362458
-            })
         else
             if detectionLoop then
                 detectionLoop:Disconnect()
                 detectionLoop = nil
             end
-            isEvading = false
-            lastSafePosition = nil
-            Rayfield:Notify({
-                Title = "Detector Desativado",
-                Content = "Monitoramento parado",
-                Duration = 2,
-                Image = 4483362458
-            })
+            cooldown = false
         end
     end
 })
