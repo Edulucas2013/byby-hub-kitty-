@@ -117,6 +117,63 @@ local tpCoords = {
     }
 }
 
+-- Sistema de monitoramento do Chapter 2
+local chapter2TrackedPaths = {
+    "Map/Club/Interacts/ControlPanel/Puzzles/Red Chip/Union",
+    "Map/Club/Interacts/Door[7]/Frames/Part[1]",
+    "Map/Club/Interacts/ControlPanel/Puzzles/Battery/Union[2]",
+    "Map/Club/Interacts/ControlPanel/Puzzles/Battery/Base",
+    "Map/Club/Interacts/ControlPanel/Puzzles/Yellow Plug/Union"
+}
+
+local chapter2ObjectsState = {}
+local chapter2ChangesDetected = false
+
+local function updateChapter2Tracking()
+    local allValid = true
+    for i, path in ipairs(chapter2TrackedPaths) do
+        local parts = path:split("/")
+        local current = workspace
+        for _, part in ipairs(parts) do
+            local index = part:match("%[(%d+)%]")
+            local name = part:gsub("%[%d+%]", "")
+            
+            if index then
+                local children = current:GetChildren()
+                current = children[tonumber(index)]
+            else
+                current = current:FindFirstChild(name)
+            end
+            
+            if not current then
+                allValid = false
+                break
+            end
+        end
+        
+        if not current then
+            allValid = false
+            break
+        end
+        
+        -- Verificar mudanças
+        if not chapter2ObjectsState[i] then
+            chapter2ChangesDetected = true
+            chapter2ObjectsState[i] = {
+                hash = tostring(current:GetFullName()),
+                lastCheck = os.time()
+            }
+        else
+            local newHash = tostring(current:GetFullName())..tostring(current:GetPropertyChangedSignal("Position"))
+            if newHash ~= chapter2ObjectsState[i].hash then
+                chapter2ChangesDetected = true
+                chapter2ObjectsState[i].hash = newHash
+            end
+        end
+    end
+    return allValid
+end
+
 -- ESP Scripts
 local orderedScripts = {
     {name = "Chap 1 ESP", url = "https://pastebin.com/raw/TfjPzuWw", chap = 1},
@@ -144,9 +201,11 @@ for _, entry in ipairs(orderedScripts) do
         Name = entry.name,
         Callback = function()
             getgenv().bybyHubSelectedChapter = entry.chap
-            local success, err = pcall(function()
-                loadstring(game:HttpGet(entry.url))()
-            end)
+                if entry.chap == 2 then
+                    chapter2ChangesDetected = false
+                        chapter2ObjectsState = {}
+                    updateChapter2Tracking() -- Captura estado inicial
+                end
             local msg = success and (entry.name .. " ativado!\nTPs agora configurados para este capítulo.") or ("Erro: " .. tostring(err))
             Rayfield:Notify({
                 Title = "byby Hub",
@@ -171,19 +230,33 @@ local TPsTab = Window:CreateTab("TP's", 4483362458)
 local function teleportTo(posVector, label)
     local plr = game.Players.LocalPlayer
     if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+        local chap = getgenv().bybyHubSelectedChapter
+        
+        -- Verificação específica para o Chapter 2
+        if chap == 2 then
+            if not updateChapter2Tracking() or not chapter2ChangesDetected then
+                Rayfield:Notify({
+                    Title = "Falha na Verificação",
+                    Content = "Nem todas as alterações do Chapter 2 foram detectadas!",
+                    Duration = 4,
+                    Image = 4483362458,
+                    Actions = { OK = { Name = "Fechar", Callback = function() end } }
+                })
+                return
+            end
+            chapter2ChangesDetected = false -- Resetar após teleporte
+        end
+
         plr.Character.HumanoidRootPart.CFrame = CFrame.new(posVector)
         Rayfield:Notify({
             Title = "TP Realizado",
             Content = label,
             Duration = 2,
             Image = 4483362458,
-            Actions = {
-                OK = { Name = "Fechar", Callback = function() end }
-            }
+            Actions = { OK = { Name = "Fechar", Callback = function() end } }
         })
     end
 end
-
 -- Location TP Buttons
 local function tpButton(name, key)
     TPsTab:CreateButton({
