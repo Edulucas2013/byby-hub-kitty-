@@ -351,64 +351,53 @@ TPsTab:CreateInput({
 -- TAB dos anti's
 local AntisTab = Window:CreateTab("anti's", 4483362458)
 
--- Botão de teste (remova depois de testar, se quiser)
+-- Botão funcional Anti-attack
 AntisTab:CreateButton({
-    Name = "Teste",
+    Name = "Anti-attack",
     Callback = function()
+        local localPlayer = game.Players.LocalPlayer
+        local ignoreCharacter = localPlayer and localPlayer.Character
+
+        task.spawn(function()
+            while true do
+                local playersFolder = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Players")
+                if playersFolder then
+                    for _, model in ipairs(playersFolder:GetChildren()) do
+                        if model:IsA("Model") and model:FindFirstChild("HumanoidRootPart") and model.Name ~= ignoreCharacter.Name then
+                            local weapon = model:FindFirstChild("Weapon")
+                            if weapon then
+                                for _, partName in ipairs({"Union", "RightHand"}) do
+                                    local part = weapon:FindFirstChild(partName)
+                                    if part and part:IsA("BasePart") then
+                                        -- Remove weld
+                                        local weld = part:FindFirstChildOfClass("WeldConstraint")
+                                        if weld then
+                                            weld:Destroy()
+                                        end
+                                        -- Desativa efeitos de dano
+                                        part.CanCollide = false
+                                        part.CanTouch = false
+                                        part.Transparency = 0.5
+                                        part.Size = Vector3.new(0.1, 0.1, 0.1)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+                task.wait(0.5) -- Verifica a cada meio segundo
+            end
+        end)
+
         Rayfield:Notify({
-            Title = "Teste",
-            Content = "Botão funcionando!",
-            Duration = 2,
+            Title = "Anti-attack Ativado",
+            Content = "Todas as armas de bots foram neutralizadas permanentemente.",
+            Duration = 4,
             Image = 4483362458
         })
     end
 })
 
--- Botão funcional Anti-attack
-AntisTab:CreateButton({
-    Name = "Anti-attack",
-    Callback = function()
-        local weaponFolder = workspace:FindFirstChild("map")
-            and workspace.map:FindFirstChild("players")
-            and workspace.map.players:FindFirstChild("BOT")
-            and workspace.map.players.BOT:FindFirstChild("Weapon")
-
-        if weaponFolder and typeof(weaponFolder.GetChildren) == "function" then
-            local found = false
-            for _, obj in ipairs(weaponFolder:GetChildren()) do
-                if obj:IsA("BasePart") or obj:IsA("UnionOperation") or obj:IsA("MeshPart") then
-                    found = true
-                    obj.CanTouch = false
-                    obj.CanCollide = false
-                    obj.Transparency = 0.7
-                    obj.Size = Vector3.new(0.1,0.1,0.1)
-                end
-            end
-            if found then
-                Rayfield:Notify({
-                    Title = "Anti-attack",
-                    Content = "Todos os objetos da Weapon do BOT foram neutralizados!",
-                    Duration = 4,
-                    Image = 4483362458
-                })
-            else
-                Rayfield:Notify({
-                    Title = "Anti-attack",
-                    Content = "Nenhum objeto perigoso encontrado na pasta Weapon!",
-                    Duration = 4,
-                    Image = 4483362458
-                })
-            end
-        else
-            Rayfield:Notify({
-                Title = "Anti-attack",
-                Content = "Pasta Weapon do BOT não encontrada!",
-                Duration = 4,
-                Image = 4483362458
-            })
-        end
-    end
-})
 
 -- Load configuration
 Rayfield:LoadConfiguration()
