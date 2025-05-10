@@ -12,6 +12,15 @@ else
     return
 end
 
+local function split(str, separator)
+    local result = {}
+    local regex = ("([^%s]+)"):format(separator)
+    for match in str:gmatch(regex) do
+        table.insert(result, match)
+    end
+    return result
+end
+
 -- Main Window
 local Window = Rayfield:CreateWindow({
     Name = "byby Hub",
@@ -41,7 +50,7 @@ local tpCoords = {
         Jail = Vector3.new(-457.791, 159.12, -370.115)
     },
     [2] = {
-        Exit = Vector3.new(-132.9264373779297, 31.22078514099121, -591.8411254882812)
+        Exit = Vector3.new(-132.9264373779297, 31.22078514099121, -591.8411254882812), 
         SecretRoom = Vector3.new(-57.15787124633789, 25.520776748657227, -428.05889892578125),
         Jail = Vector3.new(-72.49606323242188, 25.59160041809082, -545.547607421875)
     },
@@ -132,7 +141,7 @@ local chapter2ChangesDetected = false
 local function updateChapter2Tracking()
     local allValid = true
     for i, path in ipairs(chapter2TrackedPaths) do
-        local parts = path:split("/")
+        local parts = split(path, "/")
         local current = workspace
         for _, part in ipairs(parts) do
             local index = part:match("%[(%d+)%]")
@@ -198,14 +207,17 @@ local orderedScripts = {
 local ESPsTab = Window:CreateTab("ESP's", 4483362458)
 for _, entry in ipairs(orderedScripts) do
     ESPsTab:CreateButton({
-        Name = entry.name,
-        Callback = function()
-            getgenv().bybyHubSelectedChapter = entry.chap
-                if entry.chap == 2 then
-                    chapter2ChangesDetected = false
-                        chapter2ObjectsState = {}
-                    updateChapter2Tracking() -- Captura estado inicial
-                end
+    Name = entry.name,
+    Callback = function()
+        getgenv().bybyHubSelectedChapter = entry.chap
+        local success, err = pcall(function() -- Adicionei a declaração local aqui
+            loadstring(game:HttpGet(entry.url))()
+            if entry.chap == 2 then
+                chapter2ChangesDetected = false
+                chapter2ObjectsState = {}
+                updateChapter2Tracking()
+            end
+        end)
             local msg = success and (entry.name .. " ativado!\nTPs agora configurados para este capítulo.") or ("Erro: " .. tostring(err))
             Rayfield:Notify({
                 Title = "byby Hub",
