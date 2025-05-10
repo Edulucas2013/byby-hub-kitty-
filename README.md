@@ -348,5 +348,78 @@ TPsTab:CreateInput({
     end
 })
 
+-- Nova aba "Detect's"
+local DetectsTab = Window:CreateTab("Detect's", 4483362458)
+
+-- Detect Kitty Button
+DetectsTab:CreateButton({
+    Name = "Detect Kitty",
+    Callback = function()
+        local Players = game:GetService("Players")
+        local LocalPlayer = Players.LocalPlayer
+        local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+        local HRP = Character:WaitForChild("HumanoidRootPart")
+
+        local function isKitty(model)
+            local head = model:FindFirstChild("Head")
+            if not head or not head:IsA("BasePart") then return false end
+            local size = head.Size
+            local matchSizes = {
+                Vector3.new(1.8770831823349, 1.8218753337860107, 1.7666665315628052)
+            }
+            for _, s in pairs(matchSizes) do
+                if (s - size).Magnitude <= 0.1 then -- tolerância pequena
+                    return true
+                end
+            end
+            return false
+        end
+
+        local function isLookingAtYou(kittyHRP, kittyHead)
+            local lookVector = kittyHead.CFrame.LookVector
+            local toPlayer = (HRP.Position - kittyHead.Position).Unit
+            local dot = lookVector:Dot(toPlayer)
+            return dot > 0.85 -- Quanto mais próximo de 1, mais diretamente ele olha
+        end
+
+        local function detectAndTeleport()
+            local found = false
+            local mapPlayers = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Players")
+            if not mapPlayers then return end
+
+            for _, model in ipairs(mapPlayers:GetChildren()) do
+                local head = model:FindFirstChild("Head")
+                local kittyHRP = model:FindFirstChild("HumanoidRootPart")
+                if head and kittyHRP and isKitty(model) then
+                    local dist = (HRP.Position - kittyHRP.Position).Magnitude
+                    if dist < 15 and isLookingAtYou(kittyHRP, head) then
+                        found = true
+                        break
+                    end
+                end
+            end
+
+            if found then
+                HRP.CFrame = CFrame.new(332.3166198730469, 4255.6064453125, 1042.4339599609375)
+                Rayfield:Notify({
+                    Title = "Kitty Detectado!",
+                    Content = "Kitty está te perseguindo! Teleporte de emergência ativado.",
+                    Duration = 4,
+                    Image = 4483362458
+                })
+            else
+                Rayfield:Notify({
+                    Title = "Seguro!",
+                    Content = "Nenhum Kitty te olhando por perto.",
+                    Duration = 3,
+                    Image = 4483362458
+                })
+            end
+        end
+
+        detectAndTeleport()
+    end
+})
+
 -- Load configuration
 Rayfield:LoadConfiguration()
