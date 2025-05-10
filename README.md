@@ -481,18 +481,10 @@ DetectTab:CreateToggle({
 local trapEvasionEnabled = false
 local lastEvasionTime = 0
 
--- Função para calcular posição segura
-local function getEvadePosition(trapPosition, playerPosition)
-    -- Calcular direção oposta (normalizada)
-    local direction = (playerPosition - trapPosition).Unit
-    -- Distância de segurança (5 studs para trás + 3 de altura)
-    return trapPosition + (direction * 5) + Vector3.new(0, 3, 0)
-end
-
--- Função principal de detecção
+-- Função de evasão aprimorada
 local function evadeTraps()
     while trapEvasionEnabled do
-        task.wait(0.15) -- Verificação mais rápida
+        task.wait(0.1)
         
         -- Verificação do jogador
         local player = game.Players.LocalPlayer
@@ -501,7 +493,7 @@ local function evadeTraps()
         local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
         if not rootPart then continue end
 
-        -- Localização hierárquica da trap
+        -- Verificação hierárquica da trap
         local trap = workspace:FindFirstChild("Map") 
                      and workspace.Map:FindFirstChild("Traps") 
                      and workspace.Map.Traps:FindFirstChild("Trap")
@@ -509,27 +501,32 @@ local function evadeTraps()
         if trap then
             local trapRoot = trap:FindFirstChild("HumanoidRootPart")
             if trapRoot then
-                -- Cálculo de distância
-                local distance = (rootPart.Position - trapRoot.Position).Magnitude
+                -- Cálculo preciso da direção
+                local trapPosition = trapRoot.Position
+                local playerPosition = rootPart.Position
                 
-                -- Ativar evasão se dentro do raio e com cooldown
-                if distance <= 3 and (tick() - lastEvasionTime) > 2 then
-                    -- Calcular posição segura
-                    local safeCFrame = CFrame.new(
-                        getEvadePosition(trapRoot.Position, rootPart.Position)
-                    )
+                -- Calcular direção perpendicular (90 graus)
+                local direction = (playerPosition - trapPosition).Unit
+                local perpendicular = Vector3.new(-direction.Z, 0, direction.X) -- Rotação 90°
+                
+                -- Posição segura (5 studs na direção perpendicular + altura)
+                local safePosition = trapPosition + (perpendicular * 5) + Vector3.new(0, 3, 0)
+                
+                -- Verificação final de distância e cooldown
+                if (playerPosition - trapPosition).Magnitude <= 3 
+                   and (tick() - lastEvasionTime) > 1.5 then
                     
-                    -- Teleportar com verificação de segurança
+                    -- Teleportar com verificação de erro
                     pcall(function()
-                        rootPart.CFrame = safeCFrame
+                        rootPart.CFrame = CFrame.new(safePosition, safePosition + perpendicular)
                     end)
                     
-                    -- Atualizar timers e feedback
+                    -- Atualizar estado
                     lastEvasionTime = tick()
                     Rayfield:Notify({
-                        Title = "EVASÃO AUTOMÁTICA",
-                        Content = "Teletransporte realizado!",
-                        Duration = 1,
+                        Title = "EVASÃO BEM-SUCEDIDA",
+                        Content = "Posição segura: "..math.floor(safePosition.X)..", "..math.floor(safePosition.Z),
+                        Duration = 2,
                         Image = 4483362458
                     })
                 end
@@ -538,24 +535,24 @@ local function evadeTraps()
     end
 end
 
--- Criação do toggle
+-- Toggle atualizado
 DetectTab:CreateToggle({
-    Name = "Detect Traps",
+    Name = "Detect Trap's",
     CurrentValue = false,
     Callback = function(value)
         trapEvasionEnabled = value
         if value then
             coroutine.wrap(evadeTraps)()
             Rayfield:Notify({
-                Title = "MODO EVASÃO ATIVO",
-                Content = "Teletransportando quando próximo à trap!",
+                Title = "MODO DE FUGA ATIVO",
+                Content = "Sistema anti-trap inicializado!",
                 Duration = 3,
                 Image = 4483362458
             })
         else
             Rayfield:Notify({
-                Title = "MODO EVASÃO DESATIVADO",
-                Content = "Sistema de evasão desligado",
+                Title = "MODO DE FUGA DESATIVADO",
+                Content = "Sistema suspenso",
                 Duration = 3,
                 Image = 4483362458
             })
