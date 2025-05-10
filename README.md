@@ -477,5 +477,69 @@ DetectTab:CreateToggle({
     end
 })
 
+-- Variável de controle
+local trapDetectionEnabled = false
+
+-- Função principal de detecção
+local function checkTraps()
+    while trapDetectionEnabled and task.wait(0.2) do
+        local player = game.Players.LocalPlayer
+        if not player or not player.Character then continue end
+        
+        local humanoid = player.Character:FindFirstChild("Humanoid")
+        local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
+        if not humanoid or not rootPart then continue end
+
+        -- Procurar por traps
+        local trapsFolder = workspace:FindFirstChild("Map"):FindFirstChild("Traps")
+        if not trapsFolder then continue end
+
+        local shouldJump = false
+        
+        for _, trap in ipairs(trapsFolder:GetChildren()) do
+            local trapRoot = trap:FindFirstChild("HumanoidRootPart")
+            if trapRoot then
+                -- Calcular distância
+                local distance = (rootPart.Position - trapRoot.Position).Magnitude
+                if distance <= 3 then
+                    shouldJump = true
+                    break
+                end
+            end
+        end
+
+        -- Executar pulo se necessário
+        if shouldJump and humanoid.FloorMaterial ~= Enum.Material.Air then
+            humanoid.Jump = true
+            task.wait(0.5) -- Prevenir múltiplos pulos rápidos
+        end
+    end
+end
+
+-- Criar o toggle
+DetectsTab:CreateToggle({
+    Name = "Auto Pular Traps (3 studs)",
+    CurrentValue = false,
+    Callback = function(value)
+        trapDetectionEnabled = value
+        if value then
+            coroutine.wrap(checkTraps)()
+            Rayfield:Notify({
+                Title = "Detecção Ativada",
+                Content = "Pulando automaticamente quando traps próximas!",
+                Duration = 3,
+                Image = 4483362458
+            })
+        else
+            Rayfield:Notify({
+                Title = "Detecção Desativada",
+                Content = "Monitoramento de traps parado",
+                Duration = 3,
+                Image = 4483362458
+            })
+        end
+    end,
+})
+
 -- Load configuration
 Rayfield:LoadConfiguration()
