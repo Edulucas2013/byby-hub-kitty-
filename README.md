@@ -348,5 +348,85 @@ TPsTab:CreateInput({
     end
 })
 
+-- Detect Tab
+local DetectTab = Window:CreateTab("Detect's", 4483362458)
+
+DetectTab:CreateButton({
+    Name = "Detect Kitty",
+    Callback = function()
+        local targetPos = Vector3.new(332.3166198730469, 4255.6064453125, 1042.4339599609375)
+        local plr = game.Players.LocalPlayer
+        local detectionRange = 15 -- Distância em studs para ativar o TP
+        
+        -- Valores de tamanho da cabeça para verificação
+        local validSize = Vector3.new(
+            1.8770831823349, 
+            1.8218753337860107, 
+            1.7666665315628052
+        )
+        
+        -- Função para verificar se é um Kitty válido
+        local function isValidKitty(char)
+            local head = char:FindFirstChild("Head")
+            if head and head.Size == validSize then
+                return true
+            end
+            return false
+        end
+
+        -- Verificar BOTs
+        local botFolder = game.Workspace.Map:FindFirstChild("Players")
+        if botFolder then
+            for _, bot in ipairs(botFolder:GetChildren()) do
+                if bot.Name == "BOT" and bot:FindFirstChild("HumanoidRootPart") then
+                    local humanoid = bot:FindFirstChildOfClass("Humanoid")
+                    if isValidKitty(bot) then
+                        -- Verificar distância
+                        local distance = (plr.Character.HumanoidRootPart.Position - bot.HumanoidRootPart.Position).Magnitude
+                        
+                        -- Verificar se está olhando para o jogador
+                        local lookDirection = bot.HumanoidRootPart.CFrame.LookVector
+                        local toPlayer = (plr.Character.HumanoidRootPart.Position - bot.HumanoidRootPart.Position).Unit
+                        local dotProduct = lookDirection:Dot(toPlayer)
+                        
+                        if distance <= detectionRange and (dotProduct > 0.9 or humanoid.Target == plr.Character) then
+                            teleportTo(targetPos, "Kitty Detectado! Teleportando...")
+                            return
+                        end
+                    end
+                end
+            end
+        end
+
+        -- Verificar Players
+        for _, player in ipairs(game.Players:GetPlayers()) do
+            if player ~= plr and player.Character then
+                local char = player.Character
+                if char:FindFirstChild("HumanoidRootPart") and isValidKitty(char) then
+                    local humanoid = char:FindFirstChildOfClass("Humanoid")
+                    local distance = (plr.Character.HumanoidRootPart.Position - char.HumanoidRootPart.Position).Magnitude
+                    
+                    -- Verificar direção do olhar
+                    local lookDirection = char.HumanoidRootPart.CFrame.LookVector
+                    local toPlayer = (plr.Character.HumanoidRootPart.Position - char.HumanoidRootPart.Position).Unit
+                    local dotProduct = lookDirection:Dot(toPlayer)
+                    
+                    if distance <= detectionRange and (dotProduct > 0.85 or (humanoid and humanoid.Target == plr.Character)) then
+                        teleportTo(targetPos, "Kitty Player Detectado! Teleportando...")
+                        return
+                    end
+                end
+            end
+        end
+
+        Rayfield:Notify({
+            Title = "Detect Kitty",
+            Content = "Nenhum Kitty perigoso detectado próximo",
+            Duration = 3,
+            Image = 4483362458
+        })
+    end
+})
+
 -- Load configuration
 Rayfield:LoadConfiguration()
