@@ -361,41 +361,70 @@ local function isKittyThreat(kittyHead, playerHRP)
 end
 
 -- Detecta e Teleporta se necessário
-DetectTab:CreateButton({
-    Name = "detect kitty",
+DetectsTab:CreateButton({
+    Name = "Detect Kitty",
     Callback = function()
-        local plr = game.Players.LocalPlayer
-        local hrp = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-        if not hrp then return end
+        local Players = game:GetService("Players")
+        local LocalPlayer = Players.LocalPlayer
+        local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+        local HRP = Character:WaitForChild("HumanoidRootPart")
 
-        local threats = {}
-
-        for _, obj in ipairs(workspace:FindFirstChild("Map"):FindFirstChild("Players"):GetChildren()) do
-            local head = obj:FindFirstChild("Head")
-            if head and head:IsA("Part") and head.Size.X >= 1.7 and head.Size.X <= 1.9 then
-                local kittyDetected = isKittyThreat(head, hrp)
-                if kittyDetected then
-                    table.insert(threats, obj)
+        local function isKittyModel(model)
+            local head = model:FindFirstChild("Head")
+            if not head then return false end
+            local motors = 0
+            for _, obj in ipairs(head:GetChildren()) do
+                if obj:IsA("Motor6D") then
+                    motors = motors + 1
                 end
+            end
+            return motors == 4
+        end
+
+        local function isLookingAtYou(kittyHead)
+            local lookVector = kittyHead.CFrame.LookVector
+            local toPlayer = (HRP.Position - kittyHead.Position).Unit
+            return lookVector:Dot(toPlayer) > 0.85
+        end
+
+        local function detectAndTeleport()
+            local found = false
+            local mapPlayers = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Players")
+            if not mapPlayers then return end
+
+            for _, model in ipairs(mapPlayers:GetChildren()) do
+                if model:IsA("Model") and isKittyModel(model) then
+                    local head = model:FindFirstChild("Head")
+                    local root = model:FindFirstChild("HumanoidRootPart")
+                    if head and root then
+                        local dist = (HRP.Position - root.Position).Magnitude
+                        if dist < 20 and isLookingAtYou(head) then
+                            found = true
+                            break
+                        end
+                    end
+                end
+            end
+
+            if found then
+                HRP.CFrame = CFrame.new(332.3166198730469, 4255.6064453125, 1042.4339599609375)
+                Rayfield:Notify({
+                    Title = "Kitty Detectado!",
+                    Content = "Kitty está te olhando e perto! Teleporte de emergência!",
+                    Duration = 4,
+                    Image = 4483362458
+                })
+            else
+                Rayfield:Notify({
+                    Title = "Seguro",
+                    Content = "Nenhum Kitty próximo te olhando agora.",
+                    Duration = 3,
+                    Image = 4483362458
+                })
             end
         end
 
-        if #threats > 0 then
-            hrp.CFrame = CFrame.new(Vector3.new(332.3166, 4255.6064, 1042.4339))
-            Rayfield:Notify({
-                Title = "Fuga!",
-                Content = "Kitty detectado te seguindo ou olhando perto! Teleportado!",
-                Duration = 5,
-                Image = 4483362458
-            })
-        else
-            Rayfield:Notify({
-                Title = "Seguro",
-                Content = "Nenhum kitty perigoso por perto!",
-                Duration = 4,
-                Image = 4483362458
-            })
-        end
+        detectAndTeleport()
     end
 })
 
