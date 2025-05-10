@@ -477,66 +477,86 @@ DetectTab:CreateToggle({
     end
 })
 
--- Variável de controle
+-- Variáveis de controle
 local trapDetectionEnabled = false
 local lastJumpTime = 0
 
--- Função que verifica traps específicas
+-- Função para simular pressionar a tecla SPACE
+local function simulateSpacePress()
+    local virtualInput = game:GetService("VirtualInputManager")
+    virtualInput:SendKeyEvent(true, Enum.KeyCode.Space, false, nil)
+    task.wait(0.1)
+    virtualInput:SendKeyEvent(false, Enum.KeyCode.Space, false, nil)
+end
+
+-- Função principal de detecção
 local function checkForTraps()
     while trapDetectionEnabled do
-        task.wait(0.1) -- Verifica a cada 0.1 segundos
+        task.wait(0.1)
         
+        -- Verificação do jogador
         local player = game.Players.LocalPlayer
         if not player or not player.Character then continue end
         
+        -- Componentes essenciais
         local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
         local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
         if not humanoid or not rootPart then continue end
 
-        -- Procura pela estrutura específica da trap
-        local trap = workspace:FindFirstChild("Map"):FindFirstChild("Traps"):FindFirstChild("Trap")
+        -- Localização da trap específica
+        local trap = workspace:FindFirstChild("Map") and
+                     workspace.Map:FindFirstChild("Traps") and
+                     workspace.Map.Traps:FindFirstChild("Trap")
+        
         if trap then
-            local weld = trap:FindFirstChild("HumanoidRootPart"):FindFirstChild("Base"):FindFirstChild("WeldConstraint")
-            
+            -- Verificação da estrutura completa
+            local trapRoot = trap:FindFirstChild("HumanoidRootPart")
+            local basePart = trapRoot and trapRoot:FindFirstChild("Base")
+            local weld = basePart and basePart:FindFirstChild("WeldConstraint")
+
             if weld then
-                local trapPosition = trap.HumanoidRootPart.Position
+                -- Cálculo de distância
+                local trapPosition = trapRoot.Position
                 local distance = (rootPart.Position - trapPosition).Magnitude
                 
-                -- Se estiver a 3 studs ou menos e não tiver pulado recentemente
-                if distance <= 3 and (tick() - lastJumpTime) > 1 then
-                    humanoid.Jump = true
+                -- Lógica do pulo
+                if distance <= 3 and (tick() - lastJumpTime) > 1.5 then
+                    simulateSpacePress()  -- Pressiona SPACE
                     lastJumpTime = tick()
-                    task.wait(0.5) -- Cooldown entre pulos
+                    
+                    -- Feedback visual
+                    Rayfield:Notify({
+                        Title = "PULO AUTOMÁTICO",
+                        Content = "Trap detectada a "..math.floor(distance).." studs!",
+                        Duration = 1,
+                        Image = 4483362458
+                    })
                 end
             end
         end
     end
 end
 
--- Cria o toggle na aba Detect's
+-- Criação do toggle
 DetectTab:CreateToggle({
-    Name = "Auto Pular Trap (3 studs)",
+    Name = "Detect Trap's",
     CurrentValue = false,
     Callback = function(value)
         trapDetectionEnabled = value
         if value then
-            -- Inicia em uma nova thread para não travar o script
-            coroutine.wrap(function()
-                checkForTraps()
-            end)()
-            
+            coroutine.wrap(checkForTraps)()
             Rayfield:Notify({
-                Title = "Detector de Trap Ativado",
-                Content = "Pulando automaticamente quando detectar a trap!",
+                Title = "SISTEMA ATIVADO",
+                Content = "Pulo automático via tecla SPACE habilitado!",
                 Duration = 3,
-                Image = 4483362458,
+                Image = 4483362458
             })
         else
             Rayfield:Notify({
-                Title = "Detector de Trap Desativado",
-                Content = "Monitoramento de traps desligado",
+                Title = "SISTEMA DESATIVADO",
+                Content = "Pulo automático desligado",
                 Duration = 3,
-                Image = 4483362458,
+                Image = 4483362458
             })
         end
     end
