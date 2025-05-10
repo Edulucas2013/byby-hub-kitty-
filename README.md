@@ -478,9 +478,9 @@ DetectTab:CreateToggle({
 })
 
 -- Configurações
-local DETECTION_RANGE = 5   -- Distância de ativação
-local FORWARD_OFFSET = 10   -- 10 studs para frente
-local HEIGHT_OFFSET = 3     -- 2 studs de altura
+local DETECTION_RANGE = 10   -- Distância de ativação
+local FORWARD_OFFSET = -20   -- 10 studs para frente
+local HEIGHT_OFFSET = 10     -- 2 studs de altura
 
 -- Variáveis de controle
 local trapEvasionEnabled = false
