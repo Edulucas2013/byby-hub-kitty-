@@ -355,49 +355,35 @@ local AntisTab = Window:CreateTab("anti's", 4483362458)
 AntisTab:CreateButton({
     Name = "Anti-attack",
     Callback = function()
-        local localPlayer = game.Players.LocalPlayer
-        local ignoreCharacter = localPlayer and localPlayer.Character
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local attackRemote = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Attack")
 
-        task.spawn(function()
-            while true do
-                local playersFolder = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Players")
-                if playersFolder then
-                    for _, model in ipairs(playersFolder:GetChildren()) do
-                        if model:IsA("Model") and model:FindFirstChild("HumanoidRootPart") and model.Name ~= ignoreCharacter.Name then
-                            local weapon = model:FindFirstChild("Weapon")
-                            if weapon then
-                                for _, partName in ipairs({"Union", "RightHand"}) do
-                                    local part = weapon:FindFirstChild(partName)
-                                    if part and part:IsA("BasePart") then
-                                        -- Remove weld
-                                        local weld = part:FindFirstChildOfClass("WeldConstraint")
-                                        if weld then
-                                            weld:Destroy()
-                                        end
-                                        -- Desativa efeitos de dano
-                                        part.CanCollide = false
-                                        part.CanTouch = false
-                                        part.Transparency = 0.5
-                                        part.Size = Vector3.new(0.1, 0.1, 0.1)
-                                    end
-                                end
-                            end
-                        end
-                    end
+        -- Protege contra RemoteEvent de ataque
+        if attackRemote and attackRemote:IsA("RemoteEvent") then
+            local oldNamecall
+            oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+                if self == attackRemote and getnamecallmethod() == "FireServer" then
+                    return nil -- bloqueia o ataque
                 end
-                task.wait(0.5) -- Verifica a cada meio segundo
+                return oldNamecall(self, ...)
+            end)
+        end
+
+        -- Desativa scripts que tenham "attack" no nome
+        for _, obj in ipairs(game:GetDescendants()) do
+            if (obj:IsA("Script") or obj:IsA("LocalScript")) and string.lower(obj.Name):find("attack") then
+                obj.Disabled = true
             end
-        end)
+        end
 
         Rayfield:Notify({
             Title = "Anti-attack Ativado",
-            Content = "Todas as armas de bots foram neutralizadas permanentemente.",
-            Duration = 4,
+            Content = "RemoteEvent e scripts de ataque foram bloqueados!",
+            Duration = 5,
             Image = 4483362458
         })
     end
 })
-
 
 -- Load configuration
 Rayfield:LoadConfiguration()
