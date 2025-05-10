@@ -358,10 +358,20 @@ AntisTab:CreateButton({
         local ReplicatedStorage = game:GetService("ReplicatedStorage")
         local attackRemote = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Attack")
 
-        -- Protege contra RemoteEvent de ataque
+        -- Verifica se o RemoteEvent de ataque existe
         if attackRemote and attackRemote:IsA("RemoteEvent") then
-            -- Sobrescreve a função FireServer do RemoteEvent para não fazer nada
-            attackRemote.OnServerEvent = function() end
+            -- Sobrescreve o método OnServerEvent do RemoteEvent
+            attackRemote.OnServerEvent = function() 
+                -- Não faz nada quando o RemoteEvent é chamado
+            end
+        else
+            Rayfield:Notify({
+                Title = "Erro",
+                Content = "O RemoteEvent 'Attack' não foi encontrado!",
+                Duration = 5,
+                Image = 4483362458
+            })
+            return
         end
 
         -- Desativa scripts que tenham "attack" no nome
@@ -374,15 +384,6 @@ AntisTab:CreateButton({
         Rayfield:Notify({
             Title = "Anti-attack Ativado",
             Content = "RemoteEvent e scripts de ataque foram bloqueados!",
-            Duration = 5,
-            Image = 4483362458
-        })
-    end
-})
-
-        Rayfield:Notify({
-            Title = "Anti-attack Ativado",
-            Content = "Bots e Kitty desarmados. Proteção contínua ativada!",
             Duration = 5,
             Image = 4483362458
         })
