@@ -355,59 +355,30 @@ local AntisTab = Window:CreateTab("anti's", 4483362458)
 AntisTab:CreateButton({
     Name = "Anti-attack",
     Callback = function()
-        local Players = game:GetService("Players")
-        local LocalPlayer = Players.LocalPlayer
-        local myName = LocalPlayer and LocalPlayer.Name
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local attackRemote = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Attack")
 
-        -- 1. Desativa scripts com "attack" no nome
+        -- Protege contra RemoteEvent de ataque
+        if attackRemote and attackRemote:IsA("RemoteEvent") then
+            -- Sobrescreve a função FireServer do RemoteEvent para não fazer nada
+            attackRemote.OnServerEvent = function() end
+        end
+
+        -- Desativa scripts que tenham "attack" no nome
         for _, obj in ipairs(game:GetDescendants()) do
             if (obj:IsA("Script") or obj:IsA("LocalScript")) and string.lower(obj.Name):find("attack") then
                 obj.Disabled = true
             end
         end
 
-        -- 2. Neutraliza as armas do BOT ou Player Kitty (sem te afetar)
-        task.spawn(function()
-            while true do
-                local playersFolder = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Players")
-                if playersFolder then
-                    for _, model in ipairs(playersFolder:GetChildren()) do
-                        if model:IsA("Model") and model:FindFirstChild("HumanoidRootPart") and model.Name ~= myName then
-                            local weapon = model:FindFirstChild("Weapon")
-                            if weapon then
-                                for _, part in ipairs(weapon:GetChildren()) do
-                                    -- Se for parte física da arma
-                                    if part:IsA("BasePart") or part:IsA("UnionOperation") or part:IsA("MeshPart") then
-                                        part.CanCollide = false
-                                        part.CanTouch = false
-                                        part.Transparency = 0.7
-                                        part.Size = Vector3.new(0.1, 0.1, 0.1)
-                                        
-                                        -- Desconecta qualquer evento Touched (se suportado)
-                                        if getconnections then
-                                            for _, conn in ipairs(getconnections(part.Touched)) do
-                                                conn:Disable()
-                                            end
-                                        end
-                                    end
-
-                                    -- Remove conexões como WeldConstraint ou Weld
-                                    if part:IsA("WeldConstraint") or part:IsA("Weld") then
-                                        part:Destroy()
-                                    end
-
-                                    -- Desativa scripts dentro da arma
-                                    if part:IsA("Script") or part:IsA("LocalScript") then
-                                        part.Disabled = true
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-                wait(1) -- repete a cada segundo
-            end
-        end)
+        Rayfield:Notify({
+            Title = "Anti-attack Ativado",
+            Content = "RemoteEvent e scripts de ataque foram bloqueados!",
+            Duration = 5,
+            Image = 4483362458
+        })
+    end
+})
 
         Rayfield:Notify({
             Title = "Anti-attack Ativado",
