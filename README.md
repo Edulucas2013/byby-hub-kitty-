@@ -477,65 +477,58 @@ DetectTab:CreateToggle({
     end
 })
 
--- Variável de controle
+-- Variável para controlar o estado do Toggle
 local trapDetectionEnabled = false
 
--- Função principal de detecção
+-- Função que verifica e pula se houver traps próximas
 local function checkTraps()
-    while trapDetectionEnabled and task.wait(0.2) do
+    while trapDetectionEnabled and task.wait(0.1) do
         local player = game.Players.LocalPlayer
         if not player or not player.Character then continue end
-        
-        local humanoid = player.Character:FindFirstChild("Humanoid")
+
+        local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
         local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
         if not humanoid or not rootPart then continue end
 
-        -- Procurar por traps
-        local trapsFolder = workspace:FindFirstChild("Map"):FindFirstChild("Traps")
-        if not trapsFolder then continue end
+        -- Procura pela pasta Traps dentro de Map
+        local map = workspace:FindFirstChild("Map")
+        if not map then continue end
 
-        local shouldJump = false
-        
-        for _, trap in ipairs(trapsFolder:GetChildren()) do
-            local trapRoot = trap:FindFirstChild("HumanoidRootPart")
-            if trapRoot then
-                -- Calcular distância
-                local distance = (rootPart.Position - trapRoot.Position).Magnitude
-                if distance <= 3 then
-                    shouldJump = true
-                    break
-                end
+        local traps = map:FindFirstChild("Traps")
+        if not traps then continue end
+
+        -- Verifica cada trap
+        for _, trap in ipairs(traps:GetChildren()) do
+            local trapRoot = trap:FindFirstChild("HumanoidRootPart") or trap:FindFirstChildWhichIsA("BasePart")
+            if trapRoot and (rootPart.Position - trapRoot.Position).Magnitude <= 3 then
+                humanoid.Jump = true
+                task.wait(0.5)  -- Evita pulos repetidos muito rápidos
+                break
             end
-        end
-
-        -- Executar pulo se necessário
-        if shouldJump and humanoid.FloorMaterial ~= Enum.Material.Air then
-            humanoid.Jump = true
-            task.wait(0.5) -- Prevenir múltiplos pulos rápidos
         end
     end
 end
 
--- Criar o toggle
+-- Adiciona o Toggle à aba Detect's (que já existe)
 DetectsTab:CreateToggle({
     Name = "Auto Pular Traps (3 studs)",
     CurrentValue = false,
     Callback = function(value)
         trapDetectionEnabled = value
         if value then
-            coroutine.wrap(checkTraps)()
+            coroutine.wrap(checkTraps)()  -- Inicia a verificação em uma corrotina
             Rayfield:Notify({
-                Title = "Detecção Ativada",
-                Content = "Pulando automaticamente quando traps próximas!",
+                Title = "Detector de Traps Ativado",
+                Content = "Agora pulando automaticamente quando traps estão próximas!",
                 Duration = 3,
-                Image = 4483362458
+                Image = 4483362458,
             })
         else
             Rayfield:Notify({
-                Title = "Detecção Desativada",
-                Content = "Monitoramento de traps parado",
+                Title = "Detector de Traps Desativado",
+                Content = "Monitoramento de traps foi desligado.",
                 Duration = 3,
-                Image = 4483362458
+                Image = 4483362458,
             })
         end
     end,
