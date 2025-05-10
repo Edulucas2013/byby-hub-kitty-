@@ -361,6 +361,10 @@ local function isKittyThreat(kittyHead, playerHRP)
 end
 
 -- Detecta e Teleporta se necessário
+-- Criar aba "Detect's"
+local DetectsTab = Window:CreateTab("Detect's", 4483362458)
+
+-- Adicionar botão "Detect Kitty"
 DetectsTab:CreateButton({
     Name = "Detect Kitty",
     Callback = function()
