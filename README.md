@@ -565,12 +565,13 @@ getgenv().bybyDoorMonitor = {
     Enabled = false,
     Connections = {},
     TargetDoor = nil,
-    InitialPosition = nil,
-    Tolerance = 1.5, -- Tolerância ajustada para 1.5 studs
+    InitialRotation = Vector3.new(0, 0, 0),
+    TargetRotation = Vector3.new(180, 65.00199890136719, 180),
+    Tolerance = 1, -- Tolerância de 1 grau
     RequiredChapter = 1
 }
 
--- Função para encontrar a 19ª porta de forma confiável
+-- Função para encontrar a 19ª porta
 local function findDoor19()
     local interactsFolder = workspace:FindFirstChild("Map") 
                          and workspace.Map:FindFirstChild("House")
@@ -578,7 +579,7 @@ local function findDoor19()
     
     if not interactsFolder then return nil end
 
-    -- Coletar todas as portas e ordenar por posição
+    -- Coletar e ordenar portas pela posição Z
     local doors = {}
     for _, child in ipairs(interactsFolder:GetChildren()) do
         if child.Name == "Door" and child:FindFirstChild("Model") then
@@ -592,23 +593,23 @@ local function findDoor19()
         end
     end
 
-    -- Ordenar portas pela posição X (exemplo, ajuste conforme necessário)
+    -- Ordenar portas pela posição Z (ajuste conforme necessário)
     table.sort(doors, function(a, b)
-        return a.Position.X < b.Position.X
+        return a.Position.Z < b.Position.Z
     end)
 
     return (#doors >= 19) and doors[19].Object or nil
 end
 
--- Função principal de monitoramento
-local function monitorDoor()
+-- Função de monitoramento de rotação
+local function monitorRotation()
     -- Limpar conexões anteriores
     for _, conn in ipairs(getgenv().bybyDoorMonitor.Connections) do
         conn:Disconnect()
     end
     getgenv().bybyDoorMonitor.Connections = {}
 
-    -- Encontrar a 19ª porta
+    -- Encontrar a porta
     local door19 = findDoor19()
     if not door19 then
         Rayfield:Notify({
@@ -622,32 +623,33 @@ local function monitorDoor()
 
     local doorBase = door19.Model.Base
     getgenv().bybyDoorMonitor.TargetDoor = doorBase
-    getgenv().bybyDoorMonitor.InitialPosition = doorBase.Position
 
-    -- Função de verificação reforçada
-    local function checkDoorMovement()
+    -- Função de verificação de rotação
+    local function checkRotation()
         if not getgenv().bybyDoorMonitor.Enabled 
-           or getgenv().bybyHubSelectedChapter ~= getgenv().bybyDoorMonitor.RequiredChapter then
+           or getgenv().bybyHubSelectedChapter ~= 1 then
             return
         end
 
-        local currentPos = doorBase.Position
-        local initialPos = getgenv().bybyDoorMonitor.InitialPosition
-        local distance = (currentPos - initialPos).Magnitude
+        local currentRot = doorBase.Orientation
+        local targetRot = getgenv().bybyDoorMonitor.TargetRotation
 
-        -- Teleportar apenas se houver movimento significativo
-        if distance > getgenv().bybyDoorMonitor.Tolerance then
+        -- Verificar se a rotação está dentro da tolerância
+        if (math.abs(currentRot.X - targetRot.X) <= getgenv().bybyDoorMonitor.Tolerance) and
+           (math.abs(currentRot.Y - targetRot.Y) <= getgenv().bybyDoorMonitor.Tolerance) and
+           (math.abs(currentRot.Z - targetRot.Z) <= getgenv().bybyDoorMonitor.Tolerance) then
+
+            -- Teleportar jogador
             local plr = game.Players.LocalPlayer
             if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                -- Teleportar para as coordenadas exatas
                 plr.Character.HumanoidRootPart.CFrame = CFrame.new(
                     -544.8699951171875, 
                     140.72021484375, 
                     -367.27911376953125
                 )
                 Rayfield:Notify({
-                    Title = "Movimento Detectado!",
-                    Content = "Porta 19 alterada - Teleportado",
+                    Title = "ROTAÇÃO ALTERADA!",
+                    Content = "Porta 19 na posição crítica!",
                     Duration = 3,
                     Image = 4483362458
                 })
@@ -655,28 +657,27 @@ local function monitorDoor()
         end
     end
 
-    -- Conectar sinais de monitoramento
+    -- Conectar sinais
     table.insert(getgenv().bybyDoorMonitor.Connections,
-        doorBase:GetPropertyChangedSignal("Position"):Connect(checkDoorMovement))
+        doorBase:GetPropertyChangedSignal("Orientation"):Connect(checkRotation))
 
-    -- Verificação a cada 0.5 segundos
     table.insert(getgenv().bybyDoorMonitor.Connections,
         game:GetService("RunService").Heartbeat:Connect(function()
-            checkDoorMovement()
+            checkRotation()
         end))
 end
 
 -- Toggle na aba Detect's
 DetectTab:CreateToggle({
-    Name = "Monitor de Porta 19 (Chap1)",
+    Name = "Monitor de Rotação (Chap1)",
     CurrentValue = false,
     Callback = function(value)
         getgenv().bybyDoorMonitor.Enabled = value
         if value and getgenv().bybyHubSelectedChapter == 1 then
-            monitorDoor()
+            monitorRotation()
             Rayfield:Notify({
                 Title = "Monitor Ativo",
-                Content = "Monitorando a porta 19 do Capítulo 1",
+                Content = "Vigiando rotação da porta 19",
                 Duration = 2,
                 Image = 4483362458
             })
