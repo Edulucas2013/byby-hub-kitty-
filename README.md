@@ -729,120 +729,173 @@ local connection = nil
 local headSizeThreshold = Vector3.new(1.8770831823349, 1.8218753337860107, 1.7666665315628052)
 local allowedDifference = 0.01
 
--- Sistema de Noclip (mantido igual da versão anterior)
+-- Sistema de Noclip com tratamento de erros
+local function manageNoclip(state)
+    local plr = game:GetService("Players").LocalPlayer
+    if not plr then return end
 
--- Função melhorada para verificar alvos
-local function isValidTarget(target)
-    if not target then return false end
-    
-    -- Verificação completa do alvo
-    return target:IsDescendantOf(workspace) and
-           target:FindFirstChild("HumanoidRootPart") and
-           target:FindFirstChild("Head") and
-           (target.Head.Size - headSizeThreshold).magnitude > allowedDifference
+    local function setCollision(character, enable)
+        pcall(function()
+            for _, part in ipairs(character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = enable
+                    part.CanTouch = enable
+                    part.CanQuery = enable
+                end
+            end
+        end)
+    end
+
+    if state then
+        if plr.Character then
+            setCollision(plr.Character, false)
+        end
+        noclipConnection = plr.CharacterAdded:Connect(function(char)
+            setCollision(char, false)
+        end)
+    else
+        if noclipConnection then
+            noclipConnection:Disconnect()
+        end
+        if plr.Character then
+            setCollision(plr.Character, true)
+        end
+    end
 end
 
--- Sistema de busca de alvos otimizado
+-- Função segura para verificar alvos
+local function isValidTarget(target)
+    if not target then return false end
+    if not target:IsDescendantOf(workspace) then return false end
+    
+    local success, result = pcall(function()
+        local head = target:FindFirstChild("Head")
+        local hrp = target:FindFirstChild("HumanoidRootPart")
+        return head and hrp and (head.Size - headSizeThreshold).magnitude > allowedDifference
+    end)
+    
+    return success and result or false
+end
+
+-- Sistema de busca de alvos com fallback
 local function findNewTarget()
     local validTargets = {}
     
-    for _, player in ipairs(workspace.Map.Players:GetChildren()) do
+    local success, players = pcall(function()
+        return workspace.Map.Players:GetChildren()
+    end)
+    
+    if not success then return {} end
+
+    for _, player in ipairs(players) do
         if isValidTarget(player) then
             table.insert(validTargets, player)
         end
     end
     
-    if #validTargets > 0 then
-        return validTargets[math.random(#validTargets)]
-    end
+    return validTargets
 end
 
--- Loop principal atualizado
+-- Loop principal com tratamento completo
 local function startInfection()
     infectionActive = true
-    local plr = game.Players.LocalPlayer
+    local plr = game:GetService("Players").LocalPlayer
     
     manageNoclip(true)
 
     connection = game:GetService("RunService").Heartbeat:Connect(function()
         if not infectionActive then return end
         
-        local character = plr.Character
-        local selfHRP = character and character:FindFirstChild("HumanoidRootPart")
-        if not selfHRP then return end
+        local success, err = pcall(function()
+            local character = plr.Character
+            if not character then return end
+            
+            local selfHRP = character:FindFirstChild("HumanoidRootPart")
+            if not selfHRP then return end
 
-        -- Verificação reforçada do alvo atual
-        if currentTarget and not isValidTarget(currentTarget) then
-            currentTarget = nil
-        end
-
-        -- Busca ativa de novos alvos
-        if not currentTarget then
-            currentTarget = findNewTarget()
-            if currentTarget then
-                Rayfield:Notify({
-                    Title = "Novo Alvo",
-                    Content = "Seguindo: "..currentTarget.Name,
-                    Duration = 1.5,
-                    Image = 4483362458
-                })
+            -- Verificação segura do alvo atual
+            if currentTarget and not isValidTarget(currentTarget) then
+                currentTarget = nil
             end
-        end
 
-        -- Teleporte e monitoramento contínuo
-        if currentTarget then
-            local targetHRP = currentTarget:FindFirstChild("HumanoidRootPart")
-            if targetHRP then
-                -- Teleporte instantâneo com offset
-                local newPosition = targetHRP.Position + Vector3.new(0, 0.5, 0)
-                selfHRP.CFrame = CFrame.new(newPosition) * selfHRP.CFrame.Rotation
-                selfHRP.Velocity = Vector3.zero
-                
-                -- Verificação em tempo real da cabeça
-                if not isValidTarget(currentTarget) then
+            -- Busca de novos alvos com fallback
+            if not currentTarget then
+                local targets = findNewTarget()
+                currentTarget = #targets > 0 and targets[math.random(#targets)] or nil
+                if currentTarget then
+                    Rayfield:Notify({
+                        Title = "Novo Alvo",
+                        Content = "Seguindo: "..tostring(currentTarget.Name),
+                        Duration = 1.5,
+                        Image = 4483362458
+                    })
+                end
+            end
+
+            -- Teleporte seguro
+            if currentTarget then
+                local targetHRP = currentTarget:FindFirstChild("HumanoidRootPart")
+                if targetHRP and targetHRP:IsDescendantOf(workspace) then
+                    local newPosition = targetHRP.Position + Vector3.new(0, 0.5, 0)
+                    selfHRP.CFrame = CFrame.new(newPosition) * selfHRP.CFrame.Rotation
+                    selfHRP.Velocity = Vector3.zero
+                else
                     currentTarget = nil
                 end
             else
-                currentTarget = nil
+                if #findNewTarget() == 0 then
+                    infectionActive = false
+                    Rayfield:Notify({
+                        Title = "Infecção Finalizada",
+                        Content = "Sem alvos disponíveis!",
+                        Duration = 3,
+                        Image = 4483362458
+                    })
+                end
             end
-        else
-            -- Finalização automática
-            if not findNewTarget() then
-                infectionActive = false
-                Rayfield:Notify({
-                    Title = "Infecção Finalizada",
-                    Content = "Nenhum jogador válido encontrado!",
-                    Duration = 3,
-                    Image = 4483362458
-                })
-            end
+        end)
+
+        if not success then
+            warn("Erro no loop principal:", err)
+            infectionActive = false
         end
     end)
 end
 
--- Botão de infecção
+-- Botão com tratamento de erros
 PartyTab:CreateButton({
     Name = "Infeccion: pick all",
     Callback = function()
-        if infectionActive then
-            infectionActive = false
-            manageNoclip(false)
-            if connection then
-                connection:Disconnect()
+        local success, err = pcall(function()
+            if infectionActive then
+                infectionActive = false
+                manageNoclip(false)
+                if connection then
+                    connection:Disconnect()
+                end
+                currentTarget = nil
+                Rayfield:Notify({
+                    Title = "Modo Desativado",
+                    Content = "Infecção interrompida!",
+                    Duration = 2,
+                    Image = 4483362458
+                })
+            else
+                startInfection()
+                Rayfield:Notify({
+                    Title = "Modo Ativado",
+                    Content = "Perseguindo jogadores válidos...",
+                    Duration = 2,
+                    Image = 4483362458
+                })
             end
-            currentTarget = nil
+        end)
+        
+        if not success then
             Rayfield:Notify({
-                Title = "Modo Desativado",
-                Content = "Infecção interrompida!",
-                Duration = 2,
-                Image = 4483362458
-            })
-        else
-            startInfection()
-            Rayfield:Notify({
-                Title = "Modo Ativado",
-                Content = "Perseguindo jogadores válidos...",
-                Duration = 2,
+                Title = "Erro Crítico",
+                Content = "Erro: "..tostring(err),
+                Duration = 5,
                 Image = 4483362458
             })
         end
