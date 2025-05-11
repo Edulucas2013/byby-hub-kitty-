@@ -561,131 +561,140 @@ DetectTab:CreateToggle({
 })
 
 -- Variáveis globais
-getgenv().bybyDoorMonitor = {
+getgenv().DoorMonitor = {
     Enabled = false,
     Connections = {},
-    TargetDoor = nil,
-    InitialRotation = Vector3.new(0, 0, 0),
     TargetRotation = Vector3.new(180, 65.00199890136719, 180),
-    Tolerance = 1, -- Tolerância de 1 grau
-    RequiredChapter = 1
+    Tolerance = 2, -- Graus de tolerância
+    DebugMode = true -- Ative para ver mensagens detalhadas
 }
 
--- Função para encontrar a 19ª porta
-local function findDoor19()
-    local interactsFolder = workspace:FindFirstChild("Map") 
-                         and workspace.Map:FindFirstChild("House")
-                         and workspace.Map.House:FindFirstChild("Interacts")
-    
-    if not interactsFolder then return nil end
+--[[ 
+    Estrutura esperada:
+    Workspace
+    └─ Map
+       └─ House
+          └─ Interacts
+             └─ Door (1 até N)
+                └─ Model
+                   └─ Base (Part)
+]]
 
-    -- Coletar e ordenar portas pela posição Z
-    local doors = {}
-    for _, child in ipairs(interactsFolder:GetChildren()) do
-        if child.Name == "Door" and child:FindFirstChild("Model") then
-            local base = child.Model:FindFirstChild("Base")
-            if base then
-                table.insert(doors, {
-                    Object = child,
-                    Position = base.Position
-                })
+-- Função para imprimir mensagens de debug
+local function debug(msg)
+    if getgenv().DoorMonitor.DebugMode then
+        print("[DEBUG] " .. msg)
+    end
+end
+
+-- Função para encontrar a 19ª porta baseada na ordem de criação
+local function findDoor19()
+    local interacts = workspace:FindFirstChild("Map") 
+                    and workspace.Map:FindFirstChild("House")
+                    and workspace.Map.House:FindFirstChild("Interacts")
+    
+    if not interacts then
+        debug("Pasta Interacts não encontrada!")
+        return nil
+    end
+
+    local doorCount = 0
+    for _, child in ipairs(interacts:GetChildren()) do
+        if child.Name == "Door" then
+            doorCount = doorCount + 1
+            if doorCount == 19 then
+                debug("Porta 19 encontrada: " .. child:GetFullName())
+                return child:FindFirstChild("Model") and child.Model:FindFirstChild("Base")
             end
         end
     end
-
-    -- Ordenar portas pela posição Z (ajuste conforme necessário)
-    table.sort(doors, function(a, b)
-        return a.Position.Z < b.Position.Z
-    end)
-
-    return (#doors >= 19) and doors[19].Object or nil
+    
+    debug("Porta 19 não encontrada! Total de portas: " .. doorCount)
+    return nil
 end
 
--- Função de monitoramento de rotação
-local function monitorRotation()
-    -- Limpar conexões anteriores
-    for _, conn in ipairs(getgenv().bybyDoorMonitor.Connections) do
+-- Função para comparar rotações com tolerância
+local function checkRotation(current, target)
+    return math.abs(current.X - target.X) <= getgenv().DoorMonitor.Tolerance and
+           math.abs(current.Y - target.Y) <= getgenv().DoorMonitor.Tolerance and
+           math.abs(current.Z - target.Z) <= getgenv().DoorMonitor.Tolerance
+end
+
+-- Sistema principal de monitoramento
+local function startMonitoring()
+    -- Limpar conexões antigas
+    for _, conn in ipairs(getgenv().DoorMonitor.Connections) do
         conn:Disconnect()
     end
-    getgenv().bybyDoorMonitor.Connections = {}
+    getgenv().DoorMonitor.Connections = {}
 
-    -- Encontrar a porta
-    local door19 = findDoor19()
-    if not door19 then
-        Rayfield:Notify({
-            Title = "Erro",
-            Content = "Porta 19 não encontrada!",
-            Duration = 3,
-            Image = 4483362458
-        })
-        return
-    end
+    local doorBase = findDoor19()
+    if not doorBase then return end
 
-    local doorBase = door19.Model.Base
-    getgenv().bybyDoorMonitor.TargetDoor = doorBase
+    debug("Monitoramento iniciado na porta: " .. doorBase:GetFullName())
+    debug("Rotação inicial: " .. tostring(doorBase.Orientation))
 
-    -- Função de verificação de rotação
-    local function checkRotation()
-        if not getgenv().bybyDoorMonitor.Enabled 
-           or getgenv().bybyHubSelectedChapter ~= 1 then
-            return
-        end
-
-        local currentRot = doorBase.Orientation
-        local targetRot = getgenv().bybyDoorMonitor.TargetRotation
-
-        -- Verificar se a rotação está dentro da tolerância
-        if (math.abs(currentRot.X - targetRot.X) <= getgenv().bybyDoorMonitor.Tolerance) and
-           (math.abs(currentRot.Y - targetRot.Y) <= getgenv().bybyDoorMonitor.Tolerance) and
-           (math.abs(currentRot.Z - targetRot.Z) <= getgenv().bybyDoorMonitor.Tolerance) then
-
-            -- Teleportar jogador
-            local plr = game.Players.LocalPlayer
-            if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                plr.Character.HumanoidRootPart.CFrame = CFrame.new(
-                    -544.8699951171875, 
-                    140.72021484375, 
+    local function teleportPlayer()
+        local plr = game.Players.LocalPlayer
+        if plr and plr.Character then
+            local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                hrp.CFrame = CFrame.new(
+                    -544.8699951171875,
+                    140.72021484375,
                     -367.27911376953125
                 )
                 Rayfield:Notify({
-                    Title = "ROTAÇÃO ALTERADA!",
-                    Content = "Porta 19 na posição crítica!",
+                    Title = "ROTAÇÃO CRÍTICA!",
+                    Content = "Porta 19 na posição perigosa",
                     Duration = 3,
                     Image = 4483362458
                 })
+                debug("Teleporte executado!")
             end
         end
     end
 
-    -- Conectar sinais
-    table.insert(getgenv().bybyDoorMonitor.Connections,
-        doorBase:GetPropertyChangedSignal("Orientation"):Connect(checkRotation))
+    -- Conexão principal
+    table.insert(getgenv().DoorMonitor.Connections, doorBase:GetPropertyChangedSignal("Orientation"):Connect(function()
+        if not getgenv().DoorMonitor.Enabled then return end
+        
+        debug("Nova rotação detectada: " .. tostring(doorBase.Orientation))
+        
+        if checkRotation(doorBase.Orientation, getgenv().DoorMonitor.TargetRotation) then
+            teleportPlayer()
+        end
+    end))
 
-    table.insert(getgenv().bybyDoorMonitor.Connections,
-        game:GetService("RunService").Heartbeat:Connect(function()
-            checkRotation()
-        end))
+    -- Verificação de backup
+    table.insert(getgenv().DoorMonitor.Connections, game:GetService("RunService").Heartbeat:Connect(function()
+        if not getgenv().DoorMonitor.Enabled then return end
+        
+        if checkRotation(doorBase.Orientation, getgenv().DoorMonitor.TargetRotation) then
+            teleportPlayer()
+        end
+    end))
 end
 
 -- Toggle na aba Detect's
 DetectTab:CreateToggle({
-    Name = "Monitor de Rotação (Chap1)",
+    Name = "Alerta de Rotação (Chap1)",
     CurrentValue = false,
     Callback = function(value)
-        getgenv().bybyDoorMonitor.Enabled = value
+        getgenv().DoorMonitor.Enabled = value
         if value and getgenv().bybyHubSelectedChapter == 1 then
-            monitorRotation()
+            startMonitoring()
             Rayfield:Notify({
-                Title = "Monitor Ativo",
-                Content = "Vigiando rotação da porta 19",
+                Title = "Sistema Ativo",
+                Content = "Monitorando rotação da porta 19",
                 Duration = 2,
                 Image = 4483362458
             })
         else
-            for _, conn in ipairs(getgenv().bybyDoorMonitor.Connections) do
+            for _, conn in ipairs(getgenv().DoorMonitor.Connections) do
                 conn:Disconnect()
             end
-            getgenv().bybyDoorMonitor.Connections = {}
+            debug("Monitoramento desativado")
         end
     end
 })
