@@ -647,19 +647,10 @@ DetectTab:CreateToggle({
 
 -- Dentro da TAB Detect's (após o código existente)
 
--- Detect Exit
-local detectExitEnabled = false
-local exitDetectionConnection = nil
-local targetExitCFrame = CFrame.new(-546.133056640625, 140.72021484375, -367.26898193359375)
-local originalExitData = {
-    CFrame = CFrame.new(-539.952271, 144.300217, -366.584259, 1, 0, 0, 0, 1, 0, 0, 0, 1),
-    Rotation = Vector3.new(0, 0, 0),
-    PivotOffset = CFrame.new(0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1)
-}
-
--- Variáveis de controle global
+-- Variáveis globais de controle
 getgenv().bybyHubDetectExitEnabled = false
 getgenv().bybyHubDetectExitConnections = getgenv().bybyHubDetectExitConnections or {}
+getgenv().bybyHubDetectExitLoop = getgenv().bybyHubDetectExitLoop or nil
 
 -- Função para desconectar todos os eventos
 local function disconnectAllDetectExit()
@@ -667,27 +658,72 @@ local function disconnectAllDetectExit()
         if conn then pcall(function() conn:Disconnect() end) end
     end
     getgenv().bybyHubDetectExitConnections = {}
+    getgenv().bybyHubDetectExitLoop = false
 end
 
--- Função de teleporte para o Exit do Chap 2
-local function teleportToExitChap2()
-    local plr = game.Players.LocalPlayer
-    if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-        plr.Character.HumanoidRootPart.CFrame = CFrame.new(-132.9264373779297, 31.22078514099121, -591.8411254882812)
-        Rayfield:Notify({
-            Title = "byby Hub",
-            Content = "Teleportado para o Exit do Chap 2!",
-            Duration = 3,
-            Image = 4483362458
-        })
-    end
+-- Chap 1: Dados originais e CFrame alvo
+local targetExitCFrame = CFrame.new(-532.585, 140.72, -365.555)
+local originalExitData = {}
+
+-- Função para monitorar Chap 1
+local function monitorChap1Exit()
+    disconnectAllDetectExit()
+    getgenv().bybyHubDetectExitLoop = true
+
+    coroutine.wrap(function()
+        while getgenv().bybyHubDetectExitEnabled and getgenv().bybyHubDetectExitLoop do
+            local doorFolder = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("House")
+                            and workspace.Map.House:FindFirstChild("Interacts")
+            if doorFolder then
+                local doors = doorFolder:GetChildren()
+                local targetDoor = #doors >= 19 and doors[19]
+                if targetDoor and targetDoor:FindFirstChild("Model") then
+                    local basePart = targetDoor.Model:FindFirstChild("Base")
+                    if basePart and basePart:IsA("BasePart") then
+                        -- Salva dados originais na primeira execução
+                        if not originalExitData.CFrame then
+                            originalExitData.CFrame = basePart.CFrame
+                            originalExitData.Rotation = basePart.Rotation
+                            originalExitData.PivotOffset = basePart.PivotOffset
+                        end
+                        -- Conecta eventos
+                        local function checkExitChanges()
+                            if not getgenv().bybyHubDetectExitEnabled then return end
+                            if basePart.CFrame ~= originalExitData.CFrame or
+                               basePart.Rotation ~= originalExitData.Rotation or
+                               basePart.PivotOffset ~= originalExitData.PivotOffset then
+                                -- Teleportar jogador
+                                local plr = game.Players.LocalPlayer
+                                if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                                    disconnectAllDetectExit()
+                                    plr.Character.HumanoidRootPart.CFrame = targetExitCFrame
+                                    Rayfield:Notify({
+                                        Title = "EXIT ALTERADO!",
+                                        Content = "Teleportado para as coordenadas seguras",
+                                        Duration = 3,
+                                        Image = 4483362458
+                                    })
+                                end
+                            end
+                        end
+                        table.insert(getgenv().bybyHubDetectExitConnections, basePart:GetPropertyChangedSignal("CFrame"):Connect(checkExitChanges))
+                        table.insert(getgenv().bybyHubDetectExitConnections, basePart:GetPropertyChangedSignal("Rotation"):Connect(checkExitChanges))
+                        table.insert(getgenv().bybyHubDetectExitConnections, basePart:GetPropertyChangedSignal("PivotOffset"):Connect(checkExitChanges))
+                        break -- Sai do loop de busca, eventos estão conectados
+                    end
+                end
+            end
+            task.wait(2)
+        end
+    end)()
 end
 
--- Função para monitorar os 5 locais do Chap 2
+-- Chap 2: Função para monitorar os 5 locais
 local function monitorChap2Exit()
     disconnectAllDetectExit()
-    local changed = {false, false, false, false, false}
+    getgenv().bybyHubDetectExitLoop = true
 
+    local changed = {false, false, false, false, false}
     local function allChanged()
         for i = 1, 5 do
             if not changed[i] then return false end
@@ -695,133 +731,125 @@ local function monitorChap2Exit()
         return true
     end
 
-    -- 1. Red Chip Union
-    local redChipUnion = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Club") and workspace.Map.Club:FindFirstChild("Interacts")
-        and workspace.Map.Club.Interacts:FindFirstChild("ControlPanel")
-        and workspace.Map.Club.Interacts.ControlPanel:FindFirstChild("Puzzles")
-        and workspace.Map.Club.Interacts.ControlPanel.Puzzles:FindFirstChild("Red Chip")
-        and workspace.Map.Club.Interacts.ControlPanel.Puzzles["Red Chip"]:FindFirstChild("Union")
+    coroutine.wrap(function()
+        while getgenv().bybyHubDetectExitEnabled and getgenv().bybyHubDetectExitLoop do
+            local map = workspace:FindFirstChild("Map")
+            local club = map and map:FindFirstChild("Club")
+            local interacts = club and club:FindFirstChild("Interacts")
+            local controlPanel = interacts and interacts:FindFirstChild("ControlPanel")
+            local puzzles = controlPanel and controlPanel:FindFirstChild("Puzzles")
 
-    -- 2. 7ª Door > Frames > 1º Part
-    local doorPart = nil
-    do
-        local doors = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Club") and workspace.Map.Club:FindFirstChild("Interacts")
-            and workspace.Map.Club.Interacts:FindFirstChild("Door")
-        if doors and #doors:GetChildren() >= 7 then
-            local door = doors:GetChildren()[7]
-            if door and door:FindFirstChild("Frames") then
-                local frames = door.Frames
-                local parts = {}
-                for _, obj in ipairs(frames:GetChildren()) do
-                    if obj:IsA("BasePart") then
-                        table.insert(parts, obj)
-                    end
-                end
-                doorPart = parts[1]
-            end
-        end
-    end
+            -- 1. Red Chip Union
+            local redChipUnion = puzzles and puzzles:FindFirstChild("Red Chip") and puzzles["Red Chip"]:FindFirstChild("Union")
 
-    -- 3. 2ª Union em Battery
-    local batteryUnion2 = nil
-    do
-        local battery = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Club") and workspace.Map.Club:FindFirstChild("Interacts")
-            and workspace.Map.Club.Interacts:FindFirstChild("ControlPanel")
-            and workspace.Map.Club.Interacts.ControlPanel:FindFirstChild("Puzzles")
-            and workspace.Map.Club.Interacts.ControlPanel.Puzzles:FindFirstChild("Battery")
-        if battery then
-            local unions = {}
-            for _, obj in ipairs(battery:GetChildren()) do
-                if obj.Name == "Union" then
-                    table.insert(unions, obj)
-                end
-            end
-            batteryUnion2 = unions[2]
-        end
-    end
-
-    -- 4. Battery Base
-    local batteryBase = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Club") and workspace.Map.Club:FindFirstChild("Interacts")
-        and workspace.Map.Club.Interacts:FindFirstChild("ControlPanel")
-        and workspace.Map.Club.Interacts.ControlPanel:FindFirstChild("Puzzles")
-        and workspace.Map.Club.Interacts.ControlPanel.Puzzles:FindFirstChild("Battery")
-        and workspace.Map.Club.Interacts.ControlPanel.Puzzles.Battery:FindFirstChild("Base")
-
-    -- 5. Yellow Plug Union
-    local yellowPlugUnion = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Club") and workspace.Map.Club:FindFirstChild("Interacts")
-        and workspace.Map.Club.Interacts:FindFirstChild("ControlPanel")
-        and workspace.Map.Club.Interacts.ControlPanel:FindFirstChild("Puzzles")
-        and workspace.Map.Club.Interacts.ControlPanel.Puzzles:FindFirstChild("Yellow Plug")
-        and workspace.Map.Club.Interacts.ControlPanel.Puzzles["Yellow Plug"]:FindFirstChild("Union")
-
-    local locations = {redChipUnion, doorPart, batteryUnion2, batteryBase, yellowPlugUnion}
-
-    for idx, obj in ipairs(locations) do
-        if obj then
-            table.insert(getgenv().bybyHubDetectExitConnections, obj.ChildAdded:Connect(function()
-                changed[idx] = true
-                if allChanged() and getgenv().bybyHubDetectExitEnabled then
-                    disconnectAllDetectExit()
-                    teleportToExitChap2()
-                end
-            end))
-            table.insert(getgenv().bybyHubDetectExitConnections, obj.ChildRemoved:Connect(function()
-                changed[idx] = true
-                if allChanged() and getgenv().bybyHubDetectExitEnabled then
-                    disconnectAllDetectExit()
-                    teleportToExitChap2()
-                end
-            end))
-            table.insert(getgenv().bybyHubDetectExitConnections, obj.Changed:Connect(function()
-                changed[idx] = true
-                if allChanged() and getgenv().bybyHubDetectExitEnabled then
-                    disconnectAllDetectExit()
-                    teleportToExitChap2()
-                end
-            end))
-        end
-    end
-
-    -- Timeout de segurança
-    task.spawn(function()
-        task.wait(300)
-        disconnectAllDetectExit()
-    end)
-end
-
-local function checkExitChanges()
-    local doorFolder = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("House")
-                    and workspace.Map.House:FindFirstChild("Interacts")
-    
-    if doorFolder then
-        local doors = doorFolder:GetChildren()
-        local targetDoor = #doors >= 19 and doors[19]
-        
-        if targetDoor and targetDoor:FindFirstChild("Model") then
-            local basePart = targetDoor.Model:FindFirstChild("Base")
-            if basePart and basePart:IsA("BasePart") then
-                -- Verificar alterações
-                if basePart.CFrame ~= originalExitData.CFrame or
-                   basePart.Rotation ~= originalExitData.Rotation or
-                   basePart.PivotOffset ~= originalExitData.PivotOffset then
-                   
-                    -- Teleportar jogador
-                    local plr = game.Players.LocalPlayer
-                    if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                        plr.Character.HumanoidRootPart.CFrame = targetExitCFrame
-                        Rayfield:Notify({
-                            Title = "EXIT ALTERADO!",
-                            Content = "Teleportado para as coordenadas seguras",
-                            Duration = 3,
-                            Image = 4483362458
-                        })
+            -- 2. 7ª Door > Frames > 1º Part
+            local doorPart = nil
+            do
+                local doors = interacts and interacts:FindFirstChild("Door")
+                if doors and #doors:GetChildren() >= 7 then
+                    local door = doors:GetChildren()[7]
+                    if door and door:FindFirstChild("Frames") then
+                        local frames = door.Frames
+                        local parts = {}
+                        for _, obj in ipairs(frames:GetChildren()) do
+                            if obj:IsA("BasePart") then
+                                table.insert(parts, obj)
+                            end
+                        end
+                        doorPart = parts[1]
                     end
                 end
             end
+
+            -- 3. 2ª Union em Battery
+            local batteryUnion2 = nil
+            do
+                local battery = puzzles and puzzles:FindFirstChild("Battery")
+                if battery then
+                    local unions = {}
+                    for _, obj in ipairs(battery:GetChildren()) do
+                        if obj.Name == "Union" then
+                            table.insert(unions, obj)
+                        end
+                    end
+                    batteryUnion2 = unions[2]
+                end
+            end
+
+            -- 4. Battery Base
+            local batteryBase = puzzles and puzzles:FindFirstChild("Battery") and puzzles.Battery:FindFirstChild("Base")
+
+            -- 5. Yellow Plug Union
+            local yellowPlugUnion = puzzles and puzzles:FindFirstChild("Yellow Plug") and puzzles["Yellow Plug"]:FindFirstChild("Union")
+
+            local locations = {redChipUnion, doorPart, batteryUnion2, batteryBase, yellowPlugUnion}
+
+            -- Se todos os objetos existem, conecta eventos e sai do loop
+            local ready = true
+            for i = 1, 5 do
+                if not locations[i] then ready = false break end
+            end
+            if ready then
+                for idx, obj in ipairs(locations) do
+                    changed[idx] = false
+                    table.insert(getgenv().bybyHubDetectExitConnections, obj.ChildAdded:Connect(function()
+                        changed[idx] = true
+                        if allChanged() and getgenv().bybyHubDetectExitEnabled then
+                            disconnectAllDetectExit()
+                            local plr = game.Players.LocalPlayer
+                            if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                                plr.Character.HumanoidRootPart.CFrame = CFrame.new(-132.9264373779297, 31.22078514099121, -591.8411254882812)
+                                Rayfield:Notify({
+                                    Title = "byby Hub",
+                                    Content = "Teleportado para o Exit do Chap 2!",
+                                    Duration = 3,
+                                    Image = 4483362458
+                                })
+                            end
+                        end
+                    end))
+                    table.insert(getgenv().bybyHubDetectExitConnections, obj.ChildRemoved:Connect(function()
+                        changed[idx] = true
+                        if allChanged() and getgenv().bybyHubDetectExitEnabled then
+                            disconnectAllDetectExit()
+                            local plr = game.Players.LocalPlayer
+                            if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                                plr.Character.HumanoidRootPart.CFrame = CFrame.new(-132.9264373779297, 31.22078514099121, -591.8411254882812)
+                                Rayfield:Notify({
+                                    Title = "byby Hub",
+                                    Content = "Teleportado para o Exit do Chap 2!",
+                                    Duration = 3,
+                                    Image = 4483362458
+                                })
+                            end
+                        end
+                    end))
+                    table.insert(getgenv().bybyHubDetectExitConnections, obj.Changed:Connect(function()
+                        changed[idx] = true
+                        if allChanged() and getgenv().bybyHubDetectExitEnabled then
+                            disconnectAllDetectExit()
+                            local plr = game.Players.LocalPlayer
+                            if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                                plr.Character.HumanoidRootPart.CFrame = CFrame.new(-132.9264373779297, 31.22078514099121, -591.8411254882812)
+                                Rayfield:Notify({
+                                    Title = "byby Hub",
+                                    Content = "Teleportado para o Exit do Chap 2!",
+                                    Duration = 3,
+                                    Image = 4483362458
+                                })
+                            end
+                        end
+                    end))
+                end
+                break
+            else
+                task.wait(2)
+            end
         end
-    end
+    end)()
 end
 
+-- Toggle Detect Exit (Chap 1 e Chap 2)
 DetectTab:CreateToggle({
     Name = "Detect Exit",
     CurrentValue = false,
@@ -831,6 +859,12 @@ DetectTab:CreateToggle({
         if value then
             local chap = getgenv().bybyHubSelectedChapter
             if chap == 1 then
+                Rayfield:Notify({
+                    Title = "byby Hub",
+                    Content = "Monitorando saída do Chap 1...",
+                    Duration = 3,
+                    Image = 4483362458
+                })
                 monitorChap1Exit()
             elseif chap == 2 then
                 Rayfield:Notify({
