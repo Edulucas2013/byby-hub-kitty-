@@ -560,5 +560,108 @@ DetectTab:CreateToggle({
     end
 })
 
+-- Dentro da TAB "Detect's", após as outras funcionalidades:
+
+-- Configurações da Porta do Chap 1
+local TARGET_TP_POS = Vector3.new(-545.9398193359375, 140.72021484375, -366.0931701660156)
+local DOOR_PATH = {"Map", "House", "Interacts"}
+local EXPECTED_ROTATION = Vector3.new(0, 0, 0)
+local EXPECTED_CFRAME = CFrame.new(-539.952271, 144.300217, -366.584259)
+local EXPECTED_PIVOT = CFrame.new(0, 0, 0)
+
+-- Variáveis de controle
+local doorMonitorEnabled = false
+local originalDoorData = {}
+local monitorConnection = nil
+
+-- Função para encontrar a 19ª porta
+local function findTargetDoor()
+    local map = workspace:FindFirstChild("Map")
+    if not map then return nil end
+
+    local currentFolder = map
+    for _, folderName in ipairs(DOOR_PATH) do
+        currentFolder = currentFolder:FindFirstChild(folderName)
+        if not currentFolder then return nil end
+    end
+
+    -- Encontrar a 19ª porta
+    local doorCount = 0
+    for _, child in ipairs(currentFolder:GetChildren()) do
+        if child.Name == "Door" then
+            doorCount = doorCount + 1
+            if doorCount == 19 then
+                return child:FindFirstChild("Model") and child.Model:FindFirstChild("Base")
+            end
+        end
+    end
+    return nil
+end
+
+-- Função de monitoramento
+local function startDoorMonitoring()
+    monitorConnection = game:GetService("RunService").Heartbeat:Connect(function()
+        if not doorMonitorEnabled or getgenv().bybyHubSelectedChapter ~= 1 then return end
+        
+        local doorBase = findTargetDoor()
+        if not doorBase then return end
+
+        -- Verificar alterações
+        local currentCFrame = doorBase.CFrame
+        local currentRotation = doorBase.Orientation
+        local currentPivot = doorBase.PivotOffset
+
+        if currentRotation ~= EXPECTED_ROTATION or
+           currentCFrame ~= EXPECTED_CFRAME or
+           currentPivot ~= EXPECTED_PIVOT then
+
+            -- Teleportar jogador
+            teleportTo(TARGET_TP_POS, "Porta Alterada Detectada!")
+            
+            -- Resetar propriedades (opcional)
+            doorBase.CFrame = EXPECTED_CFRAME
+            doorBase.Orientation = EXPECTED_ROTATION
+            doorBase.PivotOffset = EXPECTED_PIVOT
+        end
+    end)
+end
+
+-- Criar o Toggle
+DetectTab:CreateToggle({
+    Name = "Monitorar Porta Chap 1",
+    CurrentValue = false,
+    Callback = function(value)
+        doorMonitorEnabled = value
+        if value then
+            -- Armazenar dados originais
+            local doorBase = findTargetDoor()
+            if doorBase then
+                originalDoorData = {
+                    CFrame = doorBase.CFrame,
+                    Rotation = doorBase.Orientation,
+                    Pivot = doorBase.PivotOffset
+                }
+            end
+            startDoorMonitoring()
+            Rayfield:Notify({
+                Title = "Monitor Ativado",
+                Content = "Vigiando a 19ª porta do Capítulo 1",
+                Duration = 3,
+                Image = 4483362458
+            })
+        else
+            if monitorConnection then
+                monitorConnection:Disconnect()
+            end
+            Rayfield:Notify({
+                Title = "Monitor Desativado",
+                Content = "Parou de vigiar a porta",
+                Duration = 3,
+                Image = 4483362458
+            })
+        end
+    end
+})
+
 -- Load configuration
 Rayfield:LoadConfiguration()
