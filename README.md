@@ -719,5 +719,141 @@ TrollTab:CreateButton({
     end
 })
 
+-- Party Mode Tab
+local PartyTab = Window:CreateTab("Party mode", 4483362458)
+
+-- Configurações
+local infectionActive = false
+local currentTarget = nil
+local connection = nil
+local headSizeThreshold = Vector3.new(1.8770831823349, 1.8218753337860107, 1.7666665315628052)
+local allowedDifference = 0.05
+
+-- Função para verificar tamanho da cabeça
+local function isHeadValid(head)
+    return (head.Size - headSizeThreshold).magnitude > allowedDifference
+end
+
+-- Função principal de infecção
+local function startInfection()
+    infectionActive = true
+    local plr = game.Players.LocalPlayer
+    local humanoidRootPart = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+    
+    if not humanoidRootPart then
+        Rayfield:Notify({Title = "Erro", Content = "HRP não encontrado!", Duration = 3})
+        return
+    end
+
+    -- Criar BodyPosition para movimento
+    local bodyPosition = Instance.new("BodyPosition")
+    bodyPosition.MaxForce = Vector3.new(100000, 100000, 100000)
+    bodyPosition.P = 10000
+    bodyPosition.D = 1000
+    bodyPosition.Parent = humanoidRootPart
+
+    connection = game:GetService("RunService").Heartbeat:Connect(function()
+        if not infectionActive then return end
+        
+        -- Procurar novos alvos
+        local players = workspace.Map.Players:GetChildren()
+        local validPlayers = {}
+        
+        for _, player in ipairs(players) do
+            local head = player:FindFirstChild("Head")
+            if head and isHeadValid(head) then
+                table.insert(validPlayers, player)
+            end
+        end
+
+        -- Verificar mudança de alvo
+        if currentTarget and not currentTarget.Parent then
+            currentTarget = nil
+        end
+
+        if currentTarget then
+            local head = currentTarget:FindFirstChild("Head")
+            if not head or not isHeadValid(head) then
+                currentTarget = nil
+            end
+        end
+
+        -- Selecionar novo alvo
+        if not currentTarget and #validPlayers > 0 then
+            currentTarget = validPlayers[math.random(#validPlayers)]
+            Rayfield:Notify({
+                Title = "Novo Alvo",
+                Content = "Seguindo: "..currentTarget.Name,
+                Duration = 2
+            })
+        end
+
+        -- Atualizar posição
+        if currentTarget then
+            local targetHRP = currentTarget:FindFirstChild("HumanoidRootPart")
+            if targetHRP then
+                bodyPosition.Position = targetHRP.Position
+            end
+        else
+            if #validPlayers == 0 then
+                Rayfield:Notify({
+                    Title = "Infecção Finalizada",
+                    Content = "Nenhum jogador válido restante!",
+                    Duration = 3
+                })
+                infectionActive = false
+            end
+        end
+    end)
+
+    -- Monitorar mudanças no alvo atual
+    local headListener = nil
+    local function monitorTarget()
+        if headListener then
+            headListener:Disconnect()
+            headListener = nil
+        end
+        
+        if currentTarget then
+            local head = currentTarget:FindFirstChild("Head")
+            if head then
+                headListener = head:GetPropertyChangedSignal("Size"):Connect(function()
+                    if not isHeadValid(head) then
+                        currentTarget = nil
+                        monitorTarget()
+                    end
+                end)
+            end
+        end
+    end
+    monitorTarget()
+end
+
+-- Botão de infecção
+PartyTab:CreateButton({
+    Name = "Infeccion: pick all",
+    Callback = function()
+        if infectionActive then
+            infectionActive = false
+            if connection then
+                connection:Disconnect()
+            end
+            currentTarget = nil
+            Rayfield:Notify({
+                Title = "Infecção Desativada",
+                Content = "Modo Party desligado!",
+                Duration = 2
+            })
+        else
+            startInfection()
+            Rayfield:Notify({
+                Title = "Infecção Ativada",
+                Content = "Procurando jogadores válidos...",
+                Duration = 3
+            })
+        end
+    end
+})
+
 -- Load configuration
 Rayfield:LoadConfiguration()
