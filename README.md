@@ -727,169 +727,120 @@ local infectionActive = false
 local currentTarget = nil
 local connection = nil
 local headSizeThreshold = Vector3.new(1.8770831823349, 1.8218753337860107, 1.7666665315628052)
-local allowedDifference = 0.05
-local noclipEnabled = false
+local allowedDifference = 0.01 -- Tolerância reduzida
 local noclipConnection = nil
 
--- Função para ativar/desativar noclip
-local function toggleNoclip(state)
-    local function enableNoclip(character)
+-- Sistema de Noclip Aprimorado
+local function manageNoclip(state)
+    local function setCollision(character, enable)
         for _, part in ipairs(character:GetDescendants()) do
             if part:IsA("BasePart") then
-                part.CanCollide = false
-                part.CanTouch = false
-            end
-        end
-    end
-
-    local function disableNoclip(character)
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = true
-                part.CanTouch = true
+                part.CanCollide = enable
+                part.CanTouch = enable
+                part.CanQuery = enable
             end
         end
     end
 
     local plr = game.Players.LocalPlayer
+    
     if state then
+        -- Ativar para personagem atual
         if plr.Character then
-            enableNoclip(plr.Character)
+            setCollision(plr.Character, false)
         end
-        noclipConnection = plr.CharacterAdded:Connect(enableNoclip)
+        
+        -- Conexão para novos personagens
+        noclipConnection = plr.CharacterAdded:Connect(function(char)
+            setCollision(char, false)
+        end)
     else
+        -- Desativar tudo
         if noclipConnection then
             noclipConnection:Disconnect()
         end
         if plr.Character then
-            disableNoclip(plr.Character)
+            setCollision(plr.Character, true)
         end
     end
 end
 
--- Função para verificar tamanho da cabeça
-local function isHeadValid(head)
-    return (head.Size - headSizeThreshold).magnitude > allowedDifference
+-- Função de teleporte instantâneo
+local function instantFollow(targetHRP, selfHRP)
+    if targetHRP and selfHRP then
+        -- Manter rotação original
+        local newCFrame = CFrame.new(targetHRP.Position) * selfHRP.CFrame.Rotation
+        
+        -- Aplicar teleporte suave
+        selfHRP.CFrame = newCFrame
+        
+        -- Cancelar velocidades indesejadas
+        selfHRP.Velocity = Vector3.new(0,0,0)
+        selfHRP.RotVelocity = Vector3.new(0,0,0)
+    end
 end
 
 -- Função principal de infecção
 local function startInfection()
     infectionActive = true
     local plr = game.Players.LocalPlayer
-    local humanoidRootPart = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
     
-    if not humanoidRootPart then
-        Rayfield:Notify({Title = "Erro", Content = "HRP não encontrado!", Duration = 3})
-        return
-    end
-
     -- Ativar noclip
-    toggleNoclip(true)
+    manageNoclip(true)
 
-    -- Criar BodyPosition para movimento suave
-    local bodyPosition = Instance.new("BodyPosition")
-    bodyPosition.MaxForce = Vector3.new(100000, 100000, 100000)
-    bodyPosition.P = 8500
-    bodyPosition.D = 1500
-    bodyPosition.Parent = humanoidRootPart
-
-    -- Sistema de movimento melhorado
     connection = game:GetService("RunService").Heartbeat:Connect(function()
         if not infectionActive then return end
         
-        -- Manter noclip ativo
-        if plr.Character then
-            for _, part in ipairs(plr.Character:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    part.CanCollide = false
-                end
-            end
-        end
+        -- Verificar personagem
+        local character = plr.Character
+        local selfHRP = character and character:FindFirstChild("HumanoidRootPart")
+        if not selfHRP then return end
 
-        -- Procurar novos alvos
-        local players = workspace.Map.Players:GetChildren()
+        -- Procurar alvos válidos
         local validPlayers = {}
-        
-        for _, player in ipairs(players) do
+        for _, player in ipairs(workspace.Map.Players:GetChildren()) do
             local head = player:FindFirstChild("Head")
-            if head and isHeadValid(head) then
+            if head and (head.Size - headSizeThreshold).magnitude > allowedDifference then
                 table.insert(validPlayers, player)
             end
         end
 
         -- Verificar mudança de alvo
-        if currentTarget and (not currentTarget.Parent or not currentTarget:FindFirstChild("Head")) then
+        if currentTarget and not currentTarget:FindFirstChild("HumanoidRootPart") then
             currentTarget = nil
         end
 
-        if currentTarget then
-            local head = currentTarget:FindFirstChild("Head")
-            if not head or not isHeadValid(head) then
-                currentTarget = nil
-            end
-        end
-
         -- Selecionar novo alvo
-        if not currentTarget and #validPlayers > 0 then
-            currentTarget = validPlayers[math.random(#validPlayers)]
-            Rayfield:Notify({
-                Title = "Novo Alvo",
-                Content = "Seguindo: "..currentTarget.Name,
-                Duration = 2,
-                Image = 4483362458
-            })
+        if not currentTarget or #validPlayers == 0 then
+            currentTarget = #validPlayers > 0 and validPlayers[math.random(#validPlayers)] or nil
         end
 
-        -- Atualizar posição com suavização
+        -- Teleporte instantâneo
         if currentTarget then
             local targetHRP = currentTarget:FindFirstChild("HumanoidRootPart")
             if targetHRP then
-                -- Cálculo de posição com offset vertical
-                local targetPosition = targetHRP.Position + Vector3.new(0, 3, 0)
+                -- Teleporte preciso
+                instantFollow(targetHRP, selfHRP)
                 
-                -- Interpolação suave
-                bodyPosition.Position = targetPosition
-                
-                -- Ajuste de orientação
-                humanoidRootPart.CFrame = CFrame.lookAt(
-                    humanoidRootPart.Position,
-                    Vector3.new(targetPosition.X, humanoidRootPart.Position.Y, targetPosition.Z)
-                )
+                -- Monitorar mudanças na cabeça
+                local head = currentTarget:FindFirstChild("Head")
+                if head and (head.Size - headSizeThreshold).magnitude <= allowedDifference then
+                    currentTarget = nil
+                end
             end
         else
+            -- Finalizar quando não houver alvos
             if #validPlayers == 0 then
+                infectionActive = false
                 Rayfield:Notify({
                     Title = "Infecção Finalizada",
-                    Content = "Nenhum jogador válido restante!",
+                    Content = "Todos os jogadores foram eliminados!",
                     Duration = 3,
                     Image = 4483362458
                 })
-                infectionActive = false
             end
         end
     end)
-
-    -- Monitorar mudanças no alvo atual
-    local headListener = nil
-    local function monitorTarget()
-        if headListener then
-            headListener:Disconnect()
-            headListener = nil
-        end
-        
-        if currentTarget then
-            local head = currentTarget:FindFirstChild("Head")
-            if head then
-                headListener = head:GetPropertyChangedSignal("Size"):Connect(function()
-                    if not isHeadValid(head) then
-                        currentTarget = nil
-                        monitorTarget()
-                    end
-                end)
-            end
-        end
-    end
-    monitorTarget()
 end
 
 -- Botão de infecção
@@ -898,23 +849,23 @@ PartyTab:CreateButton({
     Callback = function()
         if infectionActive then
             infectionActive = false
-            toggleNoclip(false)
+            manageNoclip(false)
             if connection then
                 connection:Disconnect()
             end
             currentTarget = nil
             Rayfield:Notify({
-                Title = "Infecção Desativada",
-                Content = "Modo Party desligado!",
+                Title = "Modo Desativado",
+                Content = "Infecção interrompida!",
                 Duration = 2,
                 Image = 4483362458
             })
         else
             startInfection()
             Rayfield:Notify({
-                Title = "Infecção Ativada",
-                Content = "Procurando jogadores válidos...",
-                Duration = 3,
+                Title = "Modo Ativado",
+                Content = "Perseguindo jogadores válidos...",
+                Duration = 2,
                 Image = 4483362458
             })
         end
