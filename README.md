@@ -560,83 +560,81 @@ DetectTab:CreateToggle({
     end
 })
 
--- Dentro da TAB "Detect's", após as outras funcionalidades:
+-- Inicialize variáveis globais no início do script:
+getgenv().bybyHubDetectExitConnections = getgenv().bybyHubDetectExitConnections or {}
+getgenv().bybyHubDetectExitLoop = false
 
--- Configurações atualizadas
-local TARGET_TP_POS = Vector3.new(-545.9398193359375, 140.72021484375, -366.0931701660156)
-local DOOR_PATH = workspace.Map.House.Interacts
-local EXPECTED_CFRAME = CFrame.new(-539.952271, 144.300217, -366.584259)
-
--- Variáveis de controle
-local doorMonitorEnabled = false
-local monitorConnection = nil
-
--- Função otimizada para encontrar a porta
-local function findTargetDoor()
-    local doors = {}
-    if DOOR_PATH then
-        for _,door in ipairs(DOOR_PATH:GetChildren()) do
-            if door.Name == "Door" then
-                table.insert(doors, door)
-            end
-        end
+local function disconnectAllDetectExit()
+    for _, connection in ipairs(getgenv().bybyHubDetectExitConnections) do
+        connection:Disconnect()
     end
-    return #doors >= 19 and doors[19]:FindFirstChild("Model") and doors[19].Model.Base
+    getgenv().bybyHubDetectExitConnections = {}
 end
 
--- Monitoramento reforçado
-local function startDoorMonitoring()
-    monitorConnection = game:GetService("RunService").Heartbeat:Connect(function()
-        if not doorMonitorEnabled or getgenv().bybyHubSelectedChapter ~= 1 then return end
-        
-        local doorBase = findTargetDoor()
-        if not doorBase then return end
+local targetExitCFrame = CFrame.new(-532.585, 140.72, -365.555)
+local originalExitData = {}
+local POSITION_TOLERANCE = 0.1 -- Tolerância para alterações
 
-        -- Verificação de estado com tolerância
-        if (doorBase.Position - EXPECTED_CFRAME.Position).Magnitude > 0.1 then
-            -- Teleporte emergencial
-            local plr = game.Players.LocalPlayer
-            if plr and plr.Character then
-                local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    -- Teleportar com offset vertical
-                    hrp.CFrame = CFrame.new(TARGET_TP_POS) + Vector3.new(0, 3, 0)
-                    
-                    -- Forçar reset da porta
-                    doorBase.CFrame = EXPECTED_CFRAME
-                    doorBase.AssemblyLinearVelocity = Vector3.new()
-                    
-                    Rayfield:Notify({
-                        Title = "ALERTA DE PORTA!",
-                        Content = "Posição resetada e jogador teleportado",
-                        Duration = 3,
-                        Image = 4483362458
-                    })
+local function monitorChap1Exit()
+    disconnectAllDetectExit()
+    getgenv().bybyHubDetectExitLoop = true
+
+    coroutine.wrap(function()
+        while getgenv().bybyHubDetectExitEnabled and getgenv().bybyHubDetectExitLoop do
+            local doorFolder = workspace:FindFirstChild("Map") 
+                            and workspace.Map:FindFirstChild("House") 
+                            and workspace.Map.House:FindFirstChild("Interacts")
+            if doorFolder then
+                local doors = doorFolder:GetChildren()
+                local targetDoor = #doors >= 19 and doors[19]
+                if targetDoor and targetDoor:FindFirstChild("Model") then
+                    local basePart = targetDoor.Model:FindFirstChild("Base")
+                    if basePart and basePart:IsA("BasePart") then
+                        -- Salvar dados originais apenas uma vez
+                        if not originalExitData.CFrame then
+                            originalExitData.CFrame = basePart.CFrame
+                            originalExitData.Position = basePart.Position
+                        end
+                        
+                        -- Função de verificação com tolerância
+                        local function checkExitChanges()
+                            if not getgenv().bybyHubDetectExitEnabled then return end
+                            if (basePart.Position - originalExitData.Position).Magnitude > POSITION_TOLERANCE then
+                                disconnectAllDetectExit()
+                                local plr = game.Players.LocalPlayer
+                                if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                                    plr.Character.HumanoidRootPart.CFrame = targetExitCFrame
+                                    Rayfield:Notify({
+                                        Title = "ALERTA DE SAÍDA!",
+                                        Content = "Posição da porta alterada. Teleportado!",
+                                        Duration = 3,
+                                        Image = 4483362458
+                                    })
+                                end
+                            end
+                        end
+
+                        -- Conectar sinais
+                        table.insert(getgenv().bybyHubDetectExitConnections, basePart:GetPropertyChangedSignal("CFrame"):Connect(checkExitChanges))
+                        table.insert(getgenv().bybyHubDetectExitConnections, basePart:GetPropertyChangedSignal("Position"):Connect(checkExitChanges))
+                    end
                 end
             end
+            task.wait(1) -- Verificar a cada 1 segundo
         end
-    end)
+    end)()
 end
 
--- Toggle revisado
 DetectTab:CreateToggle({
-    Name = "Detect exit",
+    Name = "Monitorar Saída Chap1",
     CurrentValue = false,
     Callback = function(value)
-        doorMonitorEnabled = value
+        getgenv().bybyHubDetectExitEnabled = value
         if value then
-            startDoorMonitoring()
-            Rayfield:Notify({
-                Title = "Sistema Ativado",
-                Content = "Chap 1: detecting exit...",
-                Duration = 2,
-                Image = 4483362458
-            })
+            monitorChap1Exit()
         else
-            if monitorConnection then
-                monitorConnection:Disconnect()
-                monitorConnection = nil
-            end
+            getgenv().bybyHubDetectExitLoop = false
+            disconnectAllDetectExit()
         end
     end
 })
