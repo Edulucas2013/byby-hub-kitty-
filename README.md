@@ -561,17 +561,14 @@ DetectTab:CreateToggle({
 })
 
 -- Variáveis globais
-getgenv().bybyHubDoorSystem = {
+getgenv().bybyDoorMonitor = {
     Enabled = false,
     Connections = {},
     TargetDoor = nil,
-    InitialPosition = nil
+    InitialPosition = nil,
+    Tolerance = 1.5, -- Tolerância ajustada para 1.5 studs
+    RequiredChapter = 1
 }
-
--- Configurações precisas
-local TARGET_TP = Vector3.new(-544.8699951171875, 140.72021484375, -367.27911376953125)
-local TOLERANCE = 0.5 -- 50cm de margem para evitar falsos positivos
-local REQUIRED_CHAPTER = 1
 
 -- Função para encontrar a 19ª porta de forma confiável
 local function findDoor19()
@@ -581,33 +578,39 @@ local function findDoor19()
     
     if not interactsFolder then return nil end
 
-    local doorList = {}
-    -- Coletar todas as portas primeiro
+    -- Coletar todas as portas e ordenar por posição
+    local doors = {}
     for _, child in ipairs(interactsFolder:GetChildren()) do
-        if child.Name == "Door" then
-            table.insert(doorList, child)
+        if child.Name == "Door" and child:FindFirstChild("Model") then
+            local base = child.Model:FindFirstChild("Base")
+            if base then
+                table.insert(doors, {
+                    Object = child,
+                    Position = base.Position
+                })
+            end
         end
     end
 
-    -- Verificar se temos pelo menos 19 portas
-    if #doorList < 19 then return nil end
+    -- Ordenar portas pela posição X (exemplo, ajuste conforme necessário)
+    table.sort(doors, function(a, b)
+        return a.Position.X < b.Position.X
+    end)
 
-    -- Retornar o modelo completo da 19ª porta
-    local door19 = doorList[19]
-    return door19:FindFirstChild("Model") and door19.Model:FindFirstChild("Base")
+    return (#doors >= 19) and doors[19].Object or nil
 end
 
 -- Função principal de monitoramento
 local function monitorDoor()
     -- Limpar conexões anteriores
-    for _, conn in ipairs(getgenv().bybyHubDoorSystem.Connections) do
+    for _, conn in ipairs(getgenv().bybyDoorMonitor.Connections) do
         conn:Disconnect()
     end
-    getgenv().bybyHubDoorSystem.Connections = {}
+    getgenv().bybyDoorMonitor.Connections = {}
 
-    -- Encontrar a porta específica
-    local doorBase = findDoor19()
-    if not doorBase then
+    -- Encontrar a 19ª porta
+    local door19 = findDoor19()
+    if not door19 then
         Rayfield:Notify({
             Title = "Erro",
             Content = "Porta 19 não encontrada!",
@@ -617,27 +620,34 @@ local function monitorDoor()
         return
     end
 
-    -- Armazenar estado inicial
-    getgenv().bybyHubDoorSystem.TargetDoor = doorBase
-    getgenv().bybyHubDoorSystem.InitialPosition = doorBase.Position
+    local doorBase = door19.Model.Base
+    getgenv().bybyDoorMonitor.TargetDoor = doorBase
+    getgenv().bybyDoorMonitor.InitialPosition = doorBase.Position
 
     -- Função de verificação reforçada
-    local function verifyDoorState()
-        if not getgenv().bybyHubDoorSystem.Enabled then return end
-        
+    local function checkDoorMovement()
+        if not getgenv().bybyDoorMonitor.Enabled 
+           or getgenv().bybyHubSelectedChapter ~= getgenv().bybyDoorMonitor.RequiredChapter then
+            return
+        end
+
         local currentPos = doorBase.Position
-        local initialPos = getgenv().bybyHubDoorSystem.InitialPosition
-        
-        -- Verificar mudança significativa
-        if (currentPos - initialPos).Magnitude > TOLERANCE then
-            -- Teleportar jogador
+        local initialPos = getgenv().bybyDoorMonitor.InitialPosition
+        local distance = (currentPos - initialPos).Magnitude
+
+        -- Teleportar apenas se houver movimento significativo
+        if distance > getgenv().bybyDoorMonitor.Tolerance then
             local plr = game.Players.LocalPlayer
             if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                plr.Character.HumanoidRootPart.CFrame = CFrame.new(TARGET_TP)
-                
+                -- Teleportar para as coordenadas exatas
+                plr.Character.HumanoidRootPart.CFrame = CFrame.new(
+                    -544.8699951171875, 
+                    140.72021484375, 
+                    -367.27911376953125
+                )
                 Rayfield:Notify({
-                    Title = "ALERTA DE PORTA!",
-                    Content = "Porta 19 movida - Teleportado",
+                    Title = "Movimento Detectado!",
+                    Content = "Porta 19 alterada - Teleportado",
                     Duration = 3,
                     Image = 4483362458
                 })
@@ -645,26 +655,24 @@ local function monitorDoor()
         end
     end
 
-    -- Conectar sistemas de monitoramento
-    table.insert(getgenv().bybyHubDoorSystem.Connections,
-        doorBase:GetPropertyChangedSignal("Position"):Connect(verifyDoorState))
-    
-    table.insert(getgenv().bybyHubDoorSystem.Connections,
+    -- Conectar sinais de monitoramento
+    table.insert(getgenv().bybyDoorMonitor.Connections,
+        doorBase:GetPropertyChangedSignal("Position"):Connect(checkDoorMovement))
+
+    -- Verificação a cada 0.5 segundos
+    table.insert(getgenv().bybyDoorMonitor.Connections,
         game:GetService("RunService").Heartbeat:Connect(function()
-            if getgenv().bybyHubSelectedChapter ~= REQUIRED_CHAPTER then
-                getgenv().bybyHubDoorSystem.Enabled = false
-            end
-            verifyDoorState()
+            checkDoorMovement()
         end))
 end
 
--- Toggle final
+-- Toggle na aba Detect's
 DetectTab:CreateToggle({
     Name = "Monitor de Porta 19 (Chap1)",
     CurrentValue = false,
     Callback = function(value)
-        getgenv().bybyHubDoorSystem.Enabled = value
-        if value and getgenv().bybyHubSelectedChapter == REQUIRED_CHAPTER then
+        getgenv().bybyDoorMonitor.Enabled = value
+        if value and getgenv().bybyHubSelectedChapter == 1 then
             monitorDoor()
             Rayfield:Notify({
                 Title = "Monitor Ativo",
@@ -673,10 +681,10 @@ DetectTab:CreateToggle({
                 Image = 4483362458
             })
         else
-            for _, conn in ipairs(getgenv().bybyHubDoorSystem.Connections) do
+            for _, conn in ipairs(getgenv().bybyDoorMonitor.Connections) do
                 conn:Disconnect()
             end
-            getgenv().bybyHubDoorSystem.Connections = {}
+            getgenv().bybyDoorMonitor.Connections = {}
         end
     end
 })
