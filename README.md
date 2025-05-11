@@ -12,15 +12,6 @@ else
     return
 end
 
-local function split(str, separator)
-    local result = {}
-    local regex = ("([^%s]+)"):format(separator)
-    for match in str:gmatch(regex) do
-        table.insert(result, match)
-    end
-    return result
-end
-
 -- Main Window
 local Window = Rayfield:CreateWindow({
     Name = "byby Hub",
@@ -50,7 +41,7 @@ local tpCoords = {
         Jail = Vector3.new(-457.791, 159.12, -370.115)
     },
     [2] = {
-        Exit = Vector3.new(-132.9264373779297, 31.22078514099121, -591.8411254882812), 
+        Exit = Vector3.new(-134.08067321777344, 31.22078514099121, -591.3446655273438),
         SecretRoom = Vector3.new(-57.15787124633789, 25.520776748657227, -428.05889892578125),
         Jail = Vector3.new(-72.49606323242188, 25.59160041809082, -545.547607421875)
     },
@@ -126,63 +117,6 @@ local tpCoords = {
     }
 }
 
--- Sistema de monitoramento do Chapter 2
-local chapter2TrackedPaths = {
-    "Map/Club/Interacts/ControlPanel/Puzzles/Red Chip/Union",
-    "Map/Club/Interacts/Door[7]/Frames/Part[1]",
-    "Map/Club/Interacts/ControlPanel/Puzzles/Battery/Union[2]",
-    "Map/Club/Interacts/ControlPanel/Puzzles/Battery/Base",
-    "Map/Club/Interacts/ControlPanel/Puzzles/Yellow Plug/Union"
-}
-
-local chapter2ObjectsState = {}
-local chapter2ChangesDetected = false
-
-local function updateChapter2Tracking()
-    local allValid = true
-    for i, path in ipairs(chapter2TrackedPaths) do
-        local parts = split(path, "/")
-        local current = workspace
-        for _, part in ipairs(parts) do
-            local index = part:match("%[(%d+)%]")
-            local name = part:gsub("%[%d+%]", "")
-            
-            if index then
-                local children = current:GetChildren()
-                current = children[tonumber(index)]
-            else
-                current = current:FindFirstChild(name)
-            end
-            
-            if not current then
-                allValid = false
-                break
-            end
-        end
-        
-        if not current then
-            allValid = false
-            break
-        end
-        
-        -- Verificar mudanças
-        if not chapter2ObjectsState[i] then
-            chapter2ChangesDetected = true
-            chapter2ObjectsState[i] = {
-                hash = tostring(current:GetFullName()),
-                lastCheck = os.time()
-            }
-        else
-            local newHash = tostring(current:GetFullName())..tostring(current:GetPropertyChangedSignal("Position"))
-            if newHash ~= chapter2ObjectsState[i].hash then
-                chapter2ChangesDetected = true
-                chapter2ObjectsState[i].hash = newHash
-            end
-        end
-    end
-    return allValid
-end
-
 -- ESP Scripts
 local orderedScripts = {
     {name = "Chap 1 ESP", url = "https://pastebin.com/raw/TfjPzuWw", chap = 1},
@@ -207,17 +141,12 @@ local orderedScripts = {
 local ESPsTab = Window:CreateTab("ESP's", 4483362458)
 for _, entry in ipairs(orderedScripts) do
     ESPsTab:CreateButton({
-    Name = entry.name,
-    Callback = function()
-        getgenv().bybyHubSelectedChapter = entry.chap
-        local success, err = pcall(function() -- Adicionei a declaração local aqui
-            loadstring(game:HttpGet(entry.url))()
-            if entry.chap == 2 then
-                chapter2ChangesDetected = false
-                chapter2ObjectsState = {}
-                updateChapter2Tracking()
-            end
-        end)
+        Name = entry.name,
+        Callback = function()
+            getgenv().bybyHubSelectedChapter = entry.chap
+            local success, err = pcall(function()
+                loadstring(game:HttpGet(entry.url))()
+            end)
             local msg = success and (entry.name .. " ativado!\nTPs agora configurados para este capítulo.") or ("Erro: " .. tostring(err))
             Rayfield:Notify({
                 Title = "byby Hub",
@@ -242,33 +171,19 @@ local TPsTab = Window:CreateTab("TP's", 4483362458)
 local function teleportTo(posVector, label)
     local plr = game.Players.LocalPlayer
     if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-        local chap = getgenv().bybyHubSelectedChapter
-        
-        -- Verificação específica para o Chapter 2
-        if chap == 2 then
-            if not updateChapter2Tracking() or not chapter2ChangesDetected then
-                Rayfield:Notify({
-                    Title = "Falha na Verificação",
-                    Content = "Nem todas as alterações do Chapter 2 foram detectadas!",
-                    Duration = 4,
-                    Image = 4483362458,
-                    Actions = { OK = { Name = "Fechar", Callback = function() end } }
-                })
-                return
-            end
-            chapter2ChangesDetected = false -- Resetar após teleporte
-        end
-
         plr.Character.HumanoidRootPart.CFrame = CFrame.new(posVector)
         Rayfield:Notify({
             Title = "TP Realizado",
             Content = label,
             Duration = 2,
             Image = 4483362458,
-            Actions = { OK = { Name = "Fechar", Callback = function() end } }
+            Actions = {
+                OK = { Name = "Fechar", Callback = function() end }
+            }
         })
     end
 end
+
 -- Location TP Buttons
 local function tpButton(name, key)
     TPsTab:CreateButton({
@@ -639,254 +554,6 @@ DetectTab:CreateToggle({
                 Title = "SISTEMA DESLIGADO",
                 Content = "Ultrapassagem automática desativada",
                 Duration = 3,
-                Image = 4483362458
-            })
-        end
-    end
-})
-
--- Dentro da TAB Detect's (após o código existente)
-
--- Variáveis globais de controle
-getgenv().bybyHubDetectExitEnabled = false
-getgenv().bybyHubDetectExitConnections = getgenv().bybyHubDetectExitConnections or {}
-getgenv().bybyHubDetectExitLoop = getgenv().bybyHubDetectExitLoop or nil
-
--- Função para desconectar todos os eventos
-local function disconnectAllDetectExit()
-    for _, conn in ipairs(getgenv().bybyHubDetectExitConnections) do
-        if conn then pcall(function() conn:Disconnect() end) end
-    end
-    getgenv().bybyHubDetectExitConnections = {}
-    getgenv().bybyHubDetectExitLoop = false
-end
-
--- Chap 1: Dados originais e CFrame alvo
-local targetExitCFrame = CFrame.new(-532.585, 140.72, -365.555)
-local originalExitData = {}
-
--- Função para monitorar Chap 1
-local function monitorChap1Exit()
-    disconnectAllDetectExit()
-    getgenv().bybyHubDetectExitLoop = true
-
-    coroutine.wrap(function()
-        while getgenv().bybyHubDetectExitEnabled and getgenv().bybyHubDetectExitLoop do
-            local doorFolder = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("House")
-                            and workspace.Map.House:FindFirstChild("Interacts")
-            if doorFolder then
-                local doors = doorFolder:GetChildren()
-                local targetDoor = #doors >= 19 and doors[19]
-                if targetDoor and targetDoor:FindFirstChild("Model") then
-                    local basePart = targetDoor.Model:FindFirstChild("Base")
-                    if basePart and basePart:IsA("BasePart") then
-                        -- Salva dados originais na primeira execução
-                        if not originalExitData.CFrame then
-                            originalExitData.CFrame = basePart.CFrame
-                            originalExitData.Rotation = basePart.Rotation
-                            originalExitData.PivotOffset = basePart.PivotOffset
-                        end
-                        -- Conecta eventos
-                        local function checkExitChanges()
-                            if not getgenv().bybyHubDetectExitEnabled then return end
-                            if basePart.CFrame ~= originalExitData.CFrame or
-                               basePart.Rotation ~= originalExitData.Rotation or
-                               basePart.PivotOffset ~= originalExitData.PivotOffset then
-                                -- Teleportar jogador
-                                local plr = game.Players.LocalPlayer
-                                if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                                    disconnectAllDetectExit()
-                                    plr.Character.HumanoidRootPart.CFrame = targetExitCFrame
-                                    Rayfield:Notify({
-                                        Title = "EXIT ALTERADO!",
-                                        Content = "Teleportado para as coordenadas seguras",
-                                        Duration = 3,
-                                        Image = 4483362458
-                                    })
-                                end
-                            end
-                        end
-                        table.insert(getgenv().bybyHubDetectExitConnections, basePart:GetPropertyChangedSignal("CFrame"):Connect(checkExitChanges))
-                        table.insert(getgenv().bybyHubDetectExitConnections, basePart:GetPropertyChangedSignal("Rotation"):Connect(checkExitChanges))
-                        table.insert(getgenv().bybyHubDetectExitConnections, basePart:GetPropertyChangedSignal("PivotOffset"):Connect(checkExitChanges))
-                        break -- Sai do loop de busca, eventos estão conectados
-                    end
-                end
-            end
-            task.wait(2)
-        end
-    end)()
-end
-
--- Chap 2: Função para monitorar os 5 locais
-local function monitorChap2Exit()
-    disconnectAllDetectExit()
-    getgenv().bybyHubDetectExitLoop = true
-
-    local changed = {false, false, false, false, false}
-    local function allChanged()
-        for i = 1, 5 do
-            if not changed[i] then return false end
-        end
-        return true
-    end
-
-    coroutine.wrap(function()
-        while getgenv().bybyHubDetectExitEnabled and getgenv().bybyHubDetectExitLoop do
-            local map = workspace:FindFirstChild("Map")
-            local club = map and map:FindFirstChild("Club")
-            local interacts = club and club:FindFirstChild("Interacts")
-            local controlPanel = interacts and interacts:FindFirstChild("ControlPanel")
-            local puzzles = controlPanel and controlPanel:FindFirstChild("Puzzles")
-
-            -- 1. Red Chip Union
-            local redChipUnion = puzzles and puzzles:FindFirstChild("Red Chip") and puzzles["Red Chip"]:FindFirstChild("Union")
-
-            -- 2. 7ª Door > Frames > 1º Part
-            local doorPart = nil
-            do
-                local doors = interacts and interacts:FindFirstChild("Door")
-                if doors and #doors:GetChildren() >= 7 then
-                    local door = doors:GetChildren()[7]
-                    if door and door:FindFirstChild("Frames") then
-                        local frames = door.Frames
-                        local parts = {}
-                        for _, obj in ipairs(frames:GetChildren()) do
-                            if obj:IsA("BasePart") then
-                                table.insert(parts, obj)
-                            end
-                        end
-                        doorPart = parts[1]
-                    end
-                end
-            end
-
-            -- 3. 2ª Union em Battery
-            local batteryUnion2 = nil
-            do
-                local battery = puzzles and puzzles:FindFirstChild("Battery")
-                if battery then
-                    local unions = {}
-                    for _, obj in ipairs(battery:GetChildren()) do
-                        if obj.Name == "Union" then
-                            table.insert(unions, obj)
-                        end
-                    end
-                    batteryUnion2 = unions[2]
-                end
-            end
-
-            -- 4. Battery Base
-            local batteryBase = puzzles and puzzles:FindFirstChild("Battery") and puzzles.Battery:FindFirstChild("Base")
-
-            -- 5. Yellow Plug Union
-            local yellowPlugUnion = puzzles and puzzles:FindFirstChild("Yellow Plug") and puzzles["Yellow Plug"]:FindFirstChild("Union")
-
-            local locations = {redChipUnion, doorPart, batteryUnion2, batteryBase, yellowPlugUnion}
-
-            -- Se todos os objetos existem, conecta eventos e sai do loop
-            local ready = true
-            for i = 1, 5 do
-                if not locations[i] then ready = false break end
-            end
-            if ready then
-                for idx, obj in ipairs(locations) do
-                    changed[idx] = false
-                    table.insert(getgenv().bybyHubDetectExitConnections, obj.ChildAdded:Connect(function()
-                        changed[idx] = true
-                        if allChanged() and getgenv().bybyHubDetectExitEnabled then
-                            disconnectAllDetectExit()
-                            local plr = game.Players.LocalPlayer
-                            if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                                plr.Character.HumanoidRootPart.CFrame = CFrame.new(-132.9264373779297, 31.22078514099121, -591.8411254882812)
-                                Rayfield:Notify({
-                                    Title = "byby Hub",
-                                    Content = "Teleportado para o Exit do Chap 2!",
-                                    Duration = 3,
-                                    Image = 4483362458
-                                })
-                            end
-                        end
-                    end))
-                    table.insert(getgenv().bybyHubDetectExitConnections, obj.ChildRemoved:Connect(function()
-                        changed[idx] = true
-                        if allChanged() and getgenv().bybyHubDetectExitEnabled then
-                            disconnectAllDetectExit()
-                            local plr = game.Players.LocalPlayer
-                            if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                                plr.Character.HumanoidRootPart.CFrame = CFrame.new(-132.9264373779297, 31.22078514099121, -591.8411254882812)
-                                Rayfield:Notify({
-                                    Title = "byby Hub",
-                                    Content = "Teleportado para o Exit do Chap 2!",
-                                    Duration = 3,
-                                    Image = 4483362458
-                                })
-                            end
-                        end
-                    end))
-                    table.insert(getgenv().bybyHubDetectExitConnections, obj.Changed:Connect(function()
-                        changed[idx] = true
-                        if allChanged() and getgenv().bybyHubDetectExitEnabled then
-                            disconnectAllDetectExit()
-                            local plr = game.Players.LocalPlayer
-                            if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                                plr.Character.HumanoidRootPart.CFrame = CFrame.new(-132.9264373779297, 31.22078514099121, -591.8411254882812)
-                                Rayfield:Notify({
-                                    Title = "byby Hub",
-                                    Content = "Teleportado para o Exit do Chap 2!",
-                                    Duration = 3,
-                                    Image = 4483362458
-                                })
-                            end
-                        end
-                    end))
-                end
-                break
-            else
-                task.wait(2)
-            end
-        end
-    end)()
-end
-
--- Toggle Detect Exit (Chap 1 e Chap 2)
-DetectTab:CreateToggle({
-    Name = "Detect Exit",
-    CurrentValue = false,
-    Callback = function(value)
-        getgenv().bybyHubDetectExitEnabled = value
-        disconnectAllDetectExit()
-        if value then
-            local chap = getgenv().bybyHubSelectedChapter
-            if chap == 1 then
-                Rayfield:Notify({
-                    Title = "byby Hub",
-                    Content = "Monitorando saída do Chap 1...",
-                    Duration = 3,
-                    Image = 4483362458
-                })
-                monitorChap1Exit()
-            elseif chap == 2 then
-                Rayfield:Notify({
-                    Title = "byby Hub",
-                    Content = "Monitorando locais do Chap 2 para detectar saída...",
-                    Duration = 4,
-                    Image = 4483362458
-                })
-                monitorChap2Exit()
-            else
-                Rayfield:Notify({
-                    Title = "byby Hub",
-                    Content = "Selecione o ESP do capítulo 1 ou 2 primeiro!",
-                    Duration = 3,
-                    Image = 4483362458
-                })
-            end
-        else
-            Rayfield:Notify({
-                Title = "byby Hub",
-                Content = "Detect Exit desativado.",
-                Duration = 2,
                 Image = 4483362458
             })
         end
