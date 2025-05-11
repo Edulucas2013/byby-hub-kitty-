@@ -564,25 +564,35 @@ local TrollTab = Window:CreateTab("Troll", 4483362458)
 
 -- Configurações avançadas
 local FLING_FORCE = Vector3.new(5000, 5000, 5000)
-local MAX_PARTS = 500 -- Previne crash por excesso de objetos
+local ROTATION_SPEED = 1000 -- RPM
+local MAX_PARTS = 500
 
 -- Cache de objetos
 local cache = {
     targetPart = nil,
-    activeConnections = {},
-    physicsForces = {}
+    physicsForces = {},
+    heartbeatConnection = nil,
+    localPlayer = game:GetService("Players").LocalPlayer
 }
 
--- Função de busca otimizada
+-- Função para converter RPM para radianos/s
+local function rpmToRadians(rpm)
+    return (rpm * math.pi * 2) / 60
+end
+
+-- Busca segura de partes
 local function findUnanchoredParts()
     local parts = {}
     local count = 0
     
     local function scan(o)
         if count >= MAX_PARTS then return end
-        if o:IsA("BasePart") and not o.Anchored and o.Parent ~= cache.targetPart.Parent then
-            table.insert(parts, o)
-            count = count + 1
+        if o:IsA("BasePart") and not o.Anchored then
+            -- Ignorar partes do jogador local
+            if not o:IsDescendantOf(cache.localPlayer.Character) then
+                table.insert(parts, o)
+                count = count + 1
+            end
         end
         for _,child in pairs(o:GetChildren()) do
             scan(child)
@@ -593,32 +603,38 @@ local function findUnanchoredParts()
     return parts
 end
 
--- Sistema de conexão seguro
-local function createPhysicsConnection(part)
-    local bodyPos = Instance.new("BodyPosition")
-    bodyPos.MaxForce = FLING_FORCE
-    bodyPos.Position = cache.targetPart.Position
-    bodyPos.Parent = part
-
+-- Sistema de rotação controlada
+local function createRotationSystem(part)
     local bodyGyro = Instance.new("BodyGyro")
-    bodyGyro.MaxTorque = FLING_FORCE
+    bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
     bodyGyro.P = 10000
-    bodyGyro.D = 500
+    bodyGyro.D = rpmToRadians(ROTATION_SPEED)
+    bodyGyro.CFrame = part.CFrame
     bodyGyro.Parent = part
-
-    table.insert(cache.physicsForces, {pos = bodyPos, gyro = bodyGyro, part = part})
+    
+    return bodyGyro
 end
 
--- Sistema de limpeza automática
-local function cleanPreviousConnections()
-    for _, connection in ipairs(cache.physicsForces) do
-        connection.pos:Destroy()
-        connection.gyro:Destroy()
+-- Atualização contínua otimizada
+local function updateConnections()
+    if cache.targetPart and cache.targetPart.Parent then
+        for _, connection in ipairs(cache.physicsForces) do
+            if connection.part and connection.part.Parent then
+                -- Atualização de posição
+                connection.bodyPos.Position = cache.targetPart.Position
+                
+                -- Atualização de rotação
+                connection.bodyGyro.CFrame = connection.bodyGyro.CFrame * CFrame.Angles(
+                    0,
+                    rpmToRadians(ROTATION_SPEED) * task.wait(),
+                    0
+                )
+            end
+        end
     end
-    cache.physicsForces = {}
 end
 
--- Função principal super-otimizada
+-- Função principal
 local function ultimateFling()
     -- 1. Localizar alvo
     cache.targetPart = workspace:FindFirstChild("Map", true)
@@ -628,60 +644,64 @@ local function ultimateFling()
 
     if not cache.targetPart then
         Rayfield:Notify({
-            Title = "Erro Fatal",
-            Content = "BOT/UpperTorso não encontrado!",
-            Duration = 5,
-            Image = 4483362458
-        })
-        return
-    end
-
-    -- 2. Limpeza prévia
-    cleanPreviousConnections()
-
-    -- 3. Coleta de partes
-    local parts = findUnanchoredParts()
-    if #parts == 0 then
-        Rayfield:Notify({
-            Title = "Aviso",
-            Content = "Nenhuma parte solta encontrada!",
+            Title = "Erro",
+            Content = "Alvo não encontrado!",
             Duration = 3,
             Image = 4483362458
         })
         return
     end
 
-    -- 4. Conexão em lote
-    local successCount = 0
+    -- 2. Limpar conexões anteriores
+    for _, connection in ipairs(cache.physicsForces) do
+        connection.bodyPos:Destroy()
+        connection.bodyGyro:Destroy()
+    end
+    cache.physicsForces = {}
+
+    -- 3. Coletar partes
+    local parts = findUnanchoredParts()
+    if #parts == 0 then
+        Rayfield:Notify({
+            Title = "Aviso",
+            Content = "Nenhum objeto válido encontrado!",
+            Duration = 3,
+            Image = 4483362458
+        })
+        return
+    end
+
+    -- 4. Criar sistemas físicos
     for _, part in ipairs(parts) do
         if part:IsDescendantOf(workspace) then
-            pcall(createPhysicsConnection, part)
-            successCount = successCount + 1
+            local bodyPos = Instance.new("BodyPosition")
+            bodyPos.MaxForce = FLING_FORCE
+            bodyPos.Position = cache.targetPart.Position
+            bodyPos.Parent = part
+
+            local bodyGyro = createRotationSystem(part)
+            
+            table.insert(cache.physicsForces, {
+                bodyPos = bodyPos,
+                bodyGyro = bodyGyro,
+                part = part
+            })
         end
     end
 
-    -- 5. Feedback dinâmico
+    -- 5. Iniciar loop de atualização
+    if cache.heartbeatConnection then
+        cache.heartbeatConnection:Disconnect()
+    end
+    
+    cache.heartbeatConnection = game:GetService("RunService").Heartbeat:Connect(updateConnections)
+
     Rayfield:Notify({
-        Title = "FLING ULTIMATE",
-        Content = string.format("%d objetos conectados!\nForça: %d", successCount, FLING_FORCE.X),
+        Title = "SUCESSO",
+        Content = string.format("%d objetos conectados!\nRotação: %d RPM", #cache.physicsForces, ROTATION_SPEED),
         Duration = 5,
         Image = 4483362458
     })
-
-    -- 6. Atualização contínua
-    local heartbeatConnection
-    heartbeatConnection = game:GetService("RunService").Heartbeat:Connect(function()
-        if not cache.targetPart or not cache.targetPart.Parent then
-            heartbeatConnection:Disconnect()
-            return
-        end
-
-        for _, connection in ipairs(cache.physicsForces) do
-            if connection.part and connection.pos then
-                connection.pos.Position = cache.targetPart.Position
-            end
-        end
-    end)
 end
 
 -- Botão principal
