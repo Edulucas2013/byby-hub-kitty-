@@ -728,6 +728,44 @@ local currentTarget = nil
 local connection = nil
 local headSizeThreshold = Vector3.new(1.8770831823349, 1.8218753337860107, 1.7666665315628052)
 local allowedDifference = 0.05
+local noclipEnabled = false
+local noclipConnection = nil
+
+-- Função para ativar/desativar noclip
+local function toggleNoclip(state)
+    local function enableNoclip(character)
+        for _, part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+                part.CanTouch = false
+            end
+        end
+    end
+
+    local function disableNoclip(character)
+        for _, part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = true
+                part.CanTouch = true
+            end
+        end
+    end
+
+    local plr = game.Players.LocalPlayer
+    if state then
+        if plr.Character then
+            enableNoclip(plr.Character)
+        end
+        noclipConnection = plr.CharacterAdded:Connect(enableNoclip)
+    else
+        if noclipConnection then
+            noclipConnection:Disconnect()
+        end
+        if plr.Character then
+            disableNoclip(plr.Character)
+        end
+    end
+end
 
 -- Função para verificar tamanho da cabeça
 local function isHeadValid(head)
@@ -745,16 +783,29 @@ local function startInfection()
         return
     end
 
-    -- Criar BodyPosition para movimento
+    -- Ativar noclip
+    toggleNoclip(true)
+
+    -- Criar BodyPosition para movimento suave
     local bodyPosition = Instance.new("BodyPosition")
     bodyPosition.MaxForce = Vector3.new(100000, 100000, 100000)
-    bodyPosition.P = 10000
-    bodyPosition.D = 1000
+    bodyPosition.P = 8500
+    bodyPosition.D = 1500
     bodyPosition.Parent = humanoidRootPart
 
+    -- Sistema de movimento melhorado
     connection = game:GetService("RunService").Heartbeat:Connect(function()
         if not infectionActive then return end
         
+        -- Manter noclip ativo
+        if plr.Character then
+            for _, part in ipairs(plr.Character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
+            end
+        end
+
         -- Procurar novos alvos
         local players = workspace.Map.Players:GetChildren()
         local validPlayers = {}
@@ -767,7 +818,7 @@ local function startInfection()
         end
 
         -- Verificar mudança de alvo
-        if currentTarget and not currentTarget.Parent then
+        if currentTarget and (not currentTarget.Parent or not currentTarget:FindFirstChild("Head")) then
             currentTarget = nil
         end
 
@@ -784,22 +835,34 @@ local function startInfection()
             Rayfield:Notify({
                 Title = "Novo Alvo",
                 Content = "Seguindo: "..currentTarget.Name,
-                Duration = 2
+                Duration = 2,
+                Image = 4483362458
             })
         end
 
-        -- Atualizar posição
+        -- Atualizar posição com suavização
         if currentTarget then
             local targetHRP = currentTarget:FindFirstChild("HumanoidRootPart")
             if targetHRP then
-                bodyPosition.Position = targetHRP.Position
+                -- Cálculo de posição com offset vertical
+                local targetPosition = targetHRP.Position + Vector3.new(0, 3, 0)
+                
+                -- Interpolação suave
+                bodyPosition.Position = targetPosition
+                
+                -- Ajuste de orientação
+                humanoidRootPart.CFrame = CFrame.lookAt(
+                    humanoidRootPart.Position,
+                    Vector3.new(targetPosition.X, humanoidRootPart.Position.Y, targetPosition.Z)
+                )
             end
         else
             if #validPlayers == 0 then
                 Rayfield:Notify({
                     Title = "Infecção Finalizada",
                     Content = "Nenhum jogador válido restante!",
-                    Duration = 3
+                    Duration = 3,
+                    Image = 4483362458
                 })
                 infectionActive = false
             end
@@ -835,6 +898,7 @@ PartyTab:CreateButton({
     Callback = function()
         if infectionActive then
             infectionActive = false
+            toggleNoclip(false)
             if connection then
                 connection:Disconnect()
             end
@@ -842,14 +906,16 @@ PartyTab:CreateButton({
             Rayfield:Notify({
                 Title = "Infecção Desativada",
                 Content = "Modo Party desligado!",
-                Duration = 2
+                Duration = 2,
+                Image = 4483362458
             })
         else
             startInfection()
             Rayfield:Notify({
                 Title = "Infecção Ativada",
                 Content = "Procurando jogadores válidos...",
-                Duration = 3
+                Duration = 3,
+                Image = 4483362458
             })
         end
     end
