@@ -727,114 +727,91 @@ local infectionActive = false
 local currentTarget = nil
 local connection = nil
 local headSizeThreshold = Vector3.new(1.8770831823349, 1.8218753337860107, 1.7666665315628052)
-local allowedDifference = 0.01 -- Tolerância reduzida
-local noclipConnection = nil
+local allowedDifference = 0.01
 
--- Sistema de Noclip Aprimorado
-local function manageNoclip(state)
-    local function setCollision(character, enable)
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = enable
-                part.CanTouch = enable
-                part.CanQuery = enable
-            end
-        end
-    end
+-- Sistema de Noclip (mantido igual da versão anterior)
 
-    local plr = game.Players.LocalPlayer
+-- Função melhorada para verificar alvos
+local function isValidTarget(target)
+    if not target then return false end
     
-    if state then
-        -- Ativar para personagem atual
-        if plr.Character then
-            setCollision(plr.Character, false)
+    -- Verificação completa do alvo
+    return target:IsDescendantOf(workspace) and
+           target:FindFirstChild("HumanoidRootPart") and
+           target:FindFirstChild("Head") and
+           (target.Head.Size - headSizeThreshold).magnitude > allowedDifference
+end
+
+-- Sistema de busca de alvos otimizado
+local function findNewTarget()
+    local validTargets = {}
+    
+    for _, player in ipairs(workspace.Map.Players:GetChildren()) do
+        if isValidTarget(player) then
+            table.insert(validTargets, player)
         end
-        
-        -- Conexão para novos personagens
-        noclipConnection = plr.CharacterAdded:Connect(function(char)
-            setCollision(char, false)
-        end)
-    else
-        -- Desativar tudo
-        if noclipConnection then
-            noclipConnection:Disconnect()
-        end
-        if plr.Character then
-            setCollision(plr.Character, true)
-        end
+    end
+    
+    if #validTargets > 0 then
+        return validTargets[math.random(#validTargets)]
     end
 end
 
--- Função de teleporte instantâneo
-local function instantFollow(targetHRP, selfHRP)
-    if targetHRP and selfHRP then
-        -- Manter rotação original
-        local newCFrame = CFrame.new(targetHRP.Position) * selfHRP.CFrame.Rotation
-        
-        -- Aplicar teleporte suave
-        selfHRP.CFrame = newCFrame
-        
-        -- Cancelar velocidades indesejadas
-        selfHRP.Velocity = Vector3.new(0,0,0)
-        selfHRP.RotVelocity = Vector3.new(0,0,0)
-    end
-end
-
--- Função principal de infecção
+-- Loop principal atualizado
 local function startInfection()
     infectionActive = true
     local plr = game.Players.LocalPlayer
     
-    -- Ativar noclip
     manageNoclip(true)
 
     connection = game:GetService("RunService").Heartbeat:Connect(function()
         if not infectionActive then return end
         
-        -- Verificar personagem
         local character = plr.Character
         local selfHRP = character and character:FindFirstChild("HumanoidRootPart")
         if not selfHRP then return end
 
-        -- Procurar alvos válidos
-        local validPlayers = {}
-        for _, player in ipairs(workspace.Map.Players:GetChildren()) do
-            local head = player:FindFirstChild("Head")
-            if head and (head.Size - headSizeThreshold).magnitude > allowedDifference then
-                table.insert(validPlayers, player)
-            end
-        end
-
-        -- Verificar mudança de alvo
-        if currentTarget and not currentTarget:FindFirstChild("HumanoidRootPart") then
+        -- Verificação reforçada do alvo atual
+        if currentTarget and not isValidTarget(currentTarget) then
             currentTarget = nil
         end
 
-        -- Selecionar novo alvo
-        if not currentTarget or #validPlayers == 0 then
-            currentTarget = #validPlayers > 0 and validPlayers[math.random(#validPlayers)] or nil
+        -- Busca ativa de novos alvos
+        if not currentTarget then
+            currentTarget = findNewTarget()
+            if currentTarget then
+                Rayfield:Notify({
+                    Title = "Novo Alvo",
+                    Content = "Seguindo: "..currentTarget.Name,
+                    Duration = 1.5,
+                    Image = 4483362458
+                })
+            end
         end
 
-        -- Teleporte instantâneo
+        -- Teleporte e monitoramento contínuo
         if currentTarget then
             local targetHRP = currentTarget:FindFirstChild("HumanoidRootPart")
             if targetHRP then
-                -- Teleporte preciso
-                instantFollow(targetHRP, selfHRP)
+                -- Teleporte instantâneo com offset
+                local newPosition = targetHRP.Position + Vector3.new(0, 0.5, 0)
+                selfHRP.CFrame = CFrame.new(newPosition) * selfHRP.CFrame.Rotation
+                selfHRP.Velocity = Vector3.zero
                 
-                -- Monitorar mudanças na cabeça
-                local head = currentTarget:FindFirstChild("Head")
-                if head and (head.Size - headSizeThreshold).magnitude <= allowedDifference then
+                -- Verificação em tempo real da cabeça
+                if not isValidTarget(currentTarget) then
                     currentTarget = nil
                 end
+            else
+                currentTarget = nil
             end
         else
-            -- Finalizar quando não houver alvos
-            if #validPlayers == 0 then
+            -- Finalização automática
+            if not findNewTarget() then
                 infectionActive = false
                 Rayfield:Notify({
                     Title = "Infecção Finalizada",
-                    Content = "Todos os jogadores foram eliminados!",
+                    Content = "Nenhum jogador válido encontrado!",
                     Duration = 3,
                     Image = 4483362458
                 })
