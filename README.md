@@ -561,103 +561,117 @@ DetectTab:CreateToggle({
 })
 
 -- Variáveis globais
-getgenv().bybyHubDetectExitConnections = getgenv().bybyHubDetectExitConnections or {}
-getgenv().bybyHubDetectExitLoop = false
+getgenv().bybyHubDoorMonitor = {
+    Enabled = false,
+    Connections = {},
+    OriginalPosition = nil,
+    TargetDoor = nil
+}
 
--- Função para desconectar todos os listeners
-local function disconnectAllDetectExit()
-    for _, connection in ipairs(getgenv().bybyHubDetectExitConnections) do
-        connection:Disconnect()
-    end
-    getgenv().bybyHubDetectExitConnections = {}
-end
+-- Configurações
+local TARGET_TP = Vector3.new(-544.8699951171875, 140.72021484375, -367.27911376953125)
+local DOOR_POSITION_TOLERANCE = 0.01 -- 1cm de precisão
 
--- Coordenadas exatas para teleporte
-local TARGET_TP_POS = Vector3.new(-544.8699951171875, 140.72021484375, -367.27911376953125)
-local TARGET_TP_CFRAME = CFrame.new(TARGET_TP_POS)
+-- Função para encontrar a 19ª porta corretamente
+local function findSpecificDoor()
+    local interacts = workspace:FindFirstChild("Map") 
+                   and workspace.Map:FindFirstChild("House")
+                   and workspace.Map.House:FindFirstChild("Interacts")
+    
+    if not interacts then return nil end
 
--- Função principal de monitoramento
-local function monitorChap1Exit()
-    disconnectAllDetectExit()
-    getgenv().bybyHubDetectExitLoop = true
-
-    coroutine.wrap(function()
-        while getgenv().bybyHubDetectExitEnabled and getgenv().bybyHubDetectExitLoop do
-            -- Encontrar a porta específica
-            local door19 = workspace:FindFirstChild("Map") 
-                         and workspace.Map:FindFirstChild("House")
-                         and workspace.Map.House:FindFirstChild("Interacts")
-                         and workspace.Map.House.Interacts:FindFirstChild("Door19") -- Alguns jogos nomeiam as portas sequencialmente
-            
-            -- Se não encontrar como "Door19", procura pela 19ª porta
-            if not door19 then
-                local interacts = workspace.Map.House.Interacts
-                local doorCount = 0
-                for _, child in ipairs(interacts:GetChildren()) do
-                    if child.Name == "Door" then
-                        doorCount = doorCount + 1
-                        if doorCount == 19 then
-                            door19 = child
-                            break
-                        end
-                    end
-                end
+    local doorCount = 0
+    for _, child in ipairs(interacts:GetChildren()) do
+        if child.Name == "Door" then
+            doorCount = doorCount + 1
+            if doorCount == 19 then
+                return child:FindFirstChild("Model") and child.Model:FindFirstChild("Base")
             end
-
-            if door19 and door19:FindFirstChild("Model") then
-                local basePart = door19.Model:FindFirstChild("Base")
-                if basePart and basePart:IsA("BasePart") then
-                    -- Conectar sinais de mudança
-                    local function checkExitChanges()
-                        if not getgenv().bybyHubDetectExitEnabled then return end
-                        
-                        -- Teleporta imediatamente quando a porta é alterada
-                        local plr = game.Players.LocalPlayer
-                        if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                            -- Teleporta para as coordenadas exatas com offset de segurança
-                            plr.Character.HumanoidRootPart.CFrame = TARGET_TP_CFRAME * CFrame.new(0, 3, 0)
-                            
-                            Rayfield:Notify({
-                                Title = "PORTA ALTERADA!",
-                                Content = "Teleportado para a saída segura",
-                                Duration = 3,
-                                Image = 4483362458
-                            })
-                        end
-                    end
-
-                    -- Conectar todos os sinais relevantes
-                    table.insert(getgenv().bybyHubDetectExitConnections, 
-                        basePart:GetPropertyChangedSignal("CFrame"):Connect(checkExitChanges))
-                    table.insert(getgenv().bybyHubDetectExitConnections, 
-                        basePart:GetPropertyChangedSignal("Position"):Connect(checkExitChanges))
-                    
-                    -- Verificação inicial
-                    checkExitChanges()
-                end
-            end
-            task.wait(1) -- Verifica a cada segundo
         end
-    end)()
+    end
+    return nil
 end
 
--- Toggle para ativar/desativar
+-- Função de monitoramento aprimorada
+local function monitorDoor()
+    -- Resetar conexões anteriores
+    for _, conn in ipairs(getgenv().bybyHubDoorMonitor.Connections) do
+        conn:Disconnect()
+    end
+    getgenv().bybyHubDoorMonitor.Connections = {}
+
+    -- Encontrar a porta específica
+    local doorBase = findSpecificDoor()
+    if not doorBase then
+        Rayfield:Notify({
+            Title = "Erro",
+            Content = "Porta 19 não encontrada!",
+            Duration = 3,
+            Image = 4483362458
+        })
+        return
+    end
+
+    -- Salvar posição original
+    getgenv().bybyHubDoorMonitor.OriginalPosition = doorBase.Position
+    getgenv().bybyHubDoorMonitor.TargetDoor = doorBase
+
+    -- Função de verificação com tolerância
+    local function checkPosition()
+        if not getgenv().bybyHubDoorMonitor.Enabled then return end
+        
+        local currentPos = doorBase.Position
+        local originalPos = getgenv().bybyHubDoorMonitor.OriginalPosition
+        
+        -- Verificar alteração significativa
+        if (currentPos - originalPos).Magnitude > DOOR_POSITION_TOLERANCE then
+            -- Teleportar jogador
+            local plr = game.Players.LocalPlayer
+            if plr and plr.Character then
+                local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    hrp.CFrame = CFrame.new(TARGET_TP)
+                    Rayfield:Notify({
+                        Title = "Movimento Detectado!",
+                        Content = "Porta 19 alterada - Teleportado",
+                        Duration = 3,
+                        Image = 4483362458
+                    })
+                end
+            end
+        end
+    end
+
+    -- Conectar sinais de monitoramento
+    table.insert(getgenv().bybyHubDoorMonitor.Connections, 
+        doorBase:GetPropertyChangedSignal("Position"):Connect(checkPosition))
+    
+    -- Verificação periódica extra
+    table.insert(getgenv().bybyHubDoorMonitor.Connections,
+        game:GetService("RunService").Heartbeat:Connect(function()
+            checkPosition()
+        end))
+end
+
+-- Toggle final
 DetectTab:CreateToggle({
-    Name = "Monitorar Porta 19 (Chap1)",
+    Name = "Monitor Porta 19 (Chap1)",
     CurrentValue = false,
     Callback = function(value)
-        getgenv().bybyHubDetectExitEnabled = value
+        getgenv().bybyHubDoorMonitor.Enabled = value
         if value and getgenv().bybyHubSelectedChapter == 1 then
-            monitorChap1Exit()
+            monitorDoor()
             Rayfield:Notify({
                 Title = "Monitor Ativo",
-                Content = "Vigiando a porta 19 do Capítulo 1",
+                Content = "Monitorando a porta 19 do Capítulo 1",
                 Duration = 2,
                 Image = 4483362458
             })
         else
-            getgenv().bybyHubDetectExitLoop = false
-            disconnectAllDetectExit()
+            for _, conn in ipairs(getgenv().bybyHubDoorMonitor.Connections) do
+                conn:Disconnect()
+            end
+            getgenv().bybyHubDoorMonitor.Connections = {}
         end
     end
 })
