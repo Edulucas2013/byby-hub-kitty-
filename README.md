@@ -657,6 +657,138 @@ local originalExitData = {
     PivotOffset = CFrame.new(0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1)
 }
 
+-- Variáveis de controle global
+getgenv().bybyHubDetectExitEnabled = false
+getgenv().bybyHubDetectExitConnections = getgenv().bybyHubDetectExitConnections or {}
+
+-- Função para desconectar todos os eventos
+local function disconnectAllDetectExit()
+    for _, conn in ipairs(getgenv().bybyHubDetectExitConnections) do
+        if conn then pcall(function() conn:Disconnect() end) end
+    end
+    getgenv().bybyHubDetectExitConnections = {}
+end
+
+-- Função de teleporte para o Exit do Chap 2
+local function teleportToExitChap2()
+    local plr = game.Players.LocalPlayer
+    if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+        plr.Character.HumanoidRootPart.CFrame = CFrame.new(-132.9264373779297, 31.22078514099121, -591.8411254882812)
+        Rayfield:Notify({
+            Title = "byby Hub",
+            Content = "Teleportado para o Exit do Chap 2!",
+            Duration = 3,
+            Image = 4483362458
+        })
+    end
+end
+
+-- Função para monitorar os 5 locais do Chap 2
+local function monitorChap2Exit()
+    disconnectAllDetectExit()
+    local changed = {false, false, false, false, false}
+
+    local function allChanged()
+        for i = 1, 5 do
+            if not changed[i] then return false end
+        end
+        return true
+    end
+
+    -- 1. Red Chip Union
+    local redChipUnion = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Club") and workspace.Map.Club:FindFirstChild("Interacts")
+        and workspace.Map.Club.Interacts:FindFirstChild("ControlPanel")
+        and workspace.Map.Club.Interacts.ControlPanel:FindFirstChild("Puzzles")
+        and workspace.Map.Club.Interacts.ControlPanel.Puzzles:FindFirstChild("Red Chip")
+        and workspace.Map.Club.Interacts.ControlPanel.Puzzles["Red Chip"]:FindFirstChild("Union")
+
+    -- 2. 7ª Door > Frames > 1º Part
+    local doorPart = nil
+    do
+        local doors = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Club") and workspace.Map.Club:FindFirstChild("Interacts")
+            and workspace.Map.Club.Interacts:FindFirstChild("Door")
+        if doors and #doors:GetChildren() >= 7 then
+            local door = doors:GetChildren()[7]
+            if door and door:FindFirstChild("Frames") then
+                local frames = door.Frames
+                local parts = {}
+                for _, obj in ipairs(frames:GetChildren()) do
+                    if obj:IsA("BasePart") then
+                        table.insert(parts, obj)
+                    end
+                end
+                doorPart = parts[1]
+            end
+        end
+    end
+
+    -- 3. 2ª Union em Battery
+    local batteryUnion2 = nil
+    do
+        local battery = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Club") and workspace.Map.Club:FindFirstChild("Interacts")
+            and workspace.Map.Club.Interacts:FindFirstChild("ControlPanel")
+            and workspace.Map.Club.Interacts.ControlPanel:FindFirstChild("Puzzles")
+            and workspace.Map.Club.Interacts.ControlPanel.Puzzles:FindFirstChild("Battery")
+        if battery then
+            local unions = {}
+            for _, obj in ipairs(battery:GetChildren()) do
+                if obj.Name == "Union" then
+                    table.insert(unions, obj)
+                end
+            end
+            batteryUnion2 = unions[2]
+        end
+    end
+
+    -- 4. Battery Base
+    local batteryBase = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Club") and workspace.Map.Club:FindFirstChild("Interacts")
+        and workspace.Map.Club.Interacts:FindFirstChild("ControlPanel")
+        and workspace.Map.Club.Interacts.ControlPanel:FindFirstChild("Puzzles")
+        and workspace.Map.Club.Interacts.ControlPanel.Puzzles:FindFirstChild("Battery")
+        and workspace.Map.Club.Interacts.ControlPanel.Puzzles.Battery:FindFirstChild("Base")
+
+    -- 5. Yellow Plug Union
+    local yellowPlugUnion = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Club") and workspace.Map.Club:FindFirstChild("Interacts")
+        and workspace.Map.Club.Interacts:FindFirstChild("ControlPanel")
+        and workspace.Map.Club.Interacts.ControlPanel:FindFirstChild("Puzzles")
+        and workspace.Map.Club.Interacts.ControlPanel.Puzzles:FindFirstChild("Yellow Plug")
+        and workspace.Map.Club.Interacts.ControlPanel.Puzzles["Yellow Plug"]:FindFirstChild("Union")
+
+    local locations = {redChipUnion, doorPart, batteryUnion2, batteryBase, yellowPlugUnion}
+
+    for idx, obj in ipairs(locations) do
+        if obj then
+            table.insert(getgenv().bybyHubDetectExitConnections, obj.ChildAdded:Connect(function()
+                changed[idx] = true
+                if allChanged() and getgenv().bybyHubDetectExitEnabled then
+                    disconnectAllDetectExit()
+                    teleportToExitChap2()
+                end
+            end))
+            table.insert(getgenv().bybyHubDetectExitConnections, obj.ChildRemoved:Connect(function()
+                changed[idx] = true
+                if allChanged() and getgenv().bybyHubDetectExitEnabled then
+                    disconnectAllDetectExit()
+                    teleportToExitChap2()
+                end
+            end))
+            table.insert(getgenv().bybyHubDetectExitConnections, obj.Changed:Connect(function()
+                changed[idx] = true
+                if allChanged() and getgenv().bybyHubDetectExitEnabled then
+                    disconnectAllDetectExit()
+                    teleportToExitChap2()
+                end
+            end))
+        end
+    end
+
+    -- Timeout de segurança
+    task.spawn(function()
+        task.wait(300)
+        disconnectAllDetectExit()
+    end)
+end
+
 local function checkExitChanges()
     local doorFolder = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("House")
                     and workspace.Map.House:FindFirstChild("Interacts")
@@ -694,195 +826,33 @@ DetectTab:CreateToggle({
     Name = "Detect Exit",
     CurrentValue = false,
     Callback = function(value)
+        getgenv().bybyHubDetectExitEnabled = value
+        disconnectAllDetectExit()
         if value then
-            if getgenv().bybyHubSelectedChapter ~= 1 then
+            local chap = getgenv().bybyHubSelectedChapter
+            if chap == 1 then
+                monitorChap1Exit()
+            elseif chap == 2 then
                 Rayfield:Notify({
-                    Title = "Erro",
-                    Content = "Selecione o Chap 1 ESP primeiro!",
+                    Title = "byby Hub",
+                    Content = "Monitorando locais do Chap 2 para detectar saída...",
                     Duration = 4,
                     Image = 4483362458
                 })
-                return
+                monitorChap2Exit()
+            else
+                Rayfield:Notify({
+                    Title = "byby Hub",
+                    Content = "Selecione o ESP do capítulo 1 ou 2 primeiro!",
+                    Duration = 3,
+                    Image = 4483362458
+                })
             end
-            
-            detectExitEnabled = true
-            exitDetectionConnection = game:GetService("RunService").Heartbeat:Connect(function()
-                pcall(checkExitChanges)
-            end)
-            Rayfield:Notify({
-                Title = "Detect Exit Ativado",
-                Content = "Monitorando alterações no Exit do Chap 1",
-                Duration = 3,
-                Image = 4483362458
-            })
-        else
-            detectExitEnabled = false
-            if exitDetectionConnection then
-                exitDetectionConnection:Disconnect()
-            end
-            Rayfield:Notify({
-                Title = "Detect Exit Desativado",
-                Content = "Parou de monitorar o Exit",
-                Duration = 3,
-                Image = 4483362458
-            })
-        end
-    end
-})
-
-local function teleportToExitChap2()
-    local plr = game.Players.LocalPlayer
-    if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-        plr.Character.HumanoidRootPart.CFrame = CFrame.new(-132.9264373779297, 31.22078514099121, -591.8411254882812)
-        Rayfield:Notify({
-            Title = "byby Hub",
-            Content = "Teleportado para o Exit do Chap 2!",
-            Duration = 3,
-            Image = 4483362458
-        })
-    end
-end
-
-local function monitorChap2Exit()
-    -- Locais a monitorar
-    local locations = {
-        -- 1. Red Chip Union
-        workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Club") and workspace.Map.Club:FindFirstChild("Interacts")
-            and workspace.Map.Club.Interacts:FindFirstChild("ControlPanel")
-            and workspace.Map.Club.Interacts.ControlPanel:FindFirstChild("Puzzles")
-            and workspace.Map.Club.Interacts.ControlPanel.Puzzles:FindFirstChild("Red Chip")
-            and workspace.Map.Club.Interacts.ControlPanel.Puzzles["Red Chip"]:FindFirstChild("Union"),
-
-        -- 2. 7ª Door > Frames > 1º Part
-        (function()
-            local doors = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Club") and workspace.Map.Club:FindFirstChild("Interacts")
-                and workspace.Map.Club.Interacts:FindFirstChild("Door")
-            if doors and #doors:GetChildren() >= 7 then
-                local door = doors:GetChildren()[7]
-                if door and door:FindFirstChild("Frames") then
-                    local frames = door.Frames
-                    local parts = {}
-                    for _, obj in ipairs(frames:GetChildren()) do
-                        if obj:IsA("BasePart") then
-                            table.insert(parts, obj)
-                        end
-                    end
-                    return parts[1]
-                end
-            end
-            return nil
-        end)(),
-
-        -- 3. 2ª Union em Battery
-        (function()
-            local battery = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Club") and workspace.Map.Club:FindFirstChild("Interacts")
-                and workspace.Map.Club.Interacts:FindFirstChild("ControlPanel")
-                and workspace.Map.Club.Interacts.ControlPanel:FindFirstChild("Puzzles")
-                and workspace.Map.Club.Interacts.ControlPanel.Puzzles:FindFirstChild("Battery")
-            if battery then
-                local unions = {}
-                for _, obj in ipairs(battery:GetChildren()) do
-                    if obj.Name == "Union" then
-                        table.insert(unions, obj)
-                    end
-                end
-                return unions[2]
-            end
-            return nil
-        end)(),
-
-        -- 4. Battery Base
-        workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Club") and workspace.Map.Club:FindFirstChild("Interacts")
-            and workspace.Map.Club.Interacts:FindFirstChild("ControlPanel")
-            and workspace.Map.Club.Interacts.ControlPanel:FindFirstChild("Puzzles")
-            and workspace.Map.Club.Interacts.ControlPanel.Puzzles:FindFirstChild("Battery")
-            and workspace.Map.Club.Interacts.ControlPanel.Puzzles.Battery:FindFirstChild("Base"),
-
-        -- 5. Yellow Plug Union
-        workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Club") and workspace.Map.Club:FindFirstChild("Interacts")
-            and workspace.Map.Club.Interacts:FindFirstChild("ControlPanel")
-            and workspace.Map.Club.Interacts.ControlPanel:FindFirstChild("Puzzles")
-            and workspace.Map.Club.Interacts.ControlPanel.Puzzles:FindFirstChild("Yellow Plug")
-            and workspace.Map.Club.Interacts.ControlPanel.Puzzles["Yellow Plug"]:FindFirstChild("Union"),
-    }
-
-    local changed = {false, false, false, false, false}
-    local connections = {}
-
-    -- Função para checar se todos mudaram
-    local function allChanged()
-        for i = 1, 5 do
-            if not changed[i] then return false end
-        end
-        return true
-    end
-
-    -- Função para desconectar tudo
-    local function disconnectAll()
-        for _, conn in ipairs(connections) do
-            if conn then pcall(function() conn:Disconnect() end) end
-        end
-        connections = {}
-    end
-
-    -- Monitorar cada local
-    for idx, obj in ipairs(locations) do
-        if obj then
-            -- Mudança de filhos
-            table.insert(connections, obj.ChildAdded:Connect(function()
-                changed[idx] = true
-                if allChanged() then
-                    disconnectAll()
-                    teleportToExitChap2()
-                end
-            end))
-            table.insert(connections, obj.ChildRemoved:Connect(function()
-                changed[idx] = true
-                if allChanged() then
-                    disconnectAll()
-                    teleportToExitChap2()
-                end
-            end))
-            -- Mudança de propriedades
-            table.insert(connections, obj.Changed:Connect(function()
-                changed[idx] = true
-                if allChanged() then
-                    disconnectAll()
-                    teleportToExitChap2()
-                end
-            end))
-        end
-    end
-
-    -- Segurança: timeout de 5 minutos para evitar loop infinito
-    task.spawn(function()
-        task.wait(300)
-        disconnectAll()
-    end)
-end
-
--- Botão Detect Exit atualizado
-DetectTab:CreateButton({
-    Name = "Detect Exit",
-    Callback = function()
-        local chap = getgenv().bybyHubSelectedChapter
-        if chap == 2 then
-            Rayfield:Notify({
-                Title = "byby Hub",
-                Content = "Monitorando locais do Chap 2 para detectar saída...",
-                Duration = 4,
-                Image = 4483362458
-            })
-            monitorChap2Exit()
-        elseif chap == 1 then
-            -- Aqui você mantém o código antigo do Chap 1
-            -- Exemplo:
-            -- monitorChap1Exit()
         else
             Rayfield:Notify({
                 Title = "byby Hub",
-                Content = "Selecione o ESP do capítulo 1 ou 2 primeiro!",
-                Duration = 3,
+                Content = "Detect Exit desativado.",
+                Duration = 2,
                 Image = 4483362458
             })
         end
