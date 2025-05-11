@@ -560,5 +560,78 @@ DetectTab:CreateToggle({
     end
 })
 
+-- Adicionar nova TAB
+local TrollTab = Window:CreateTab("Troll", 4483362458)
+
+-- Função principal para o Fling
+local function flingKittyWithUnanchoredParts()
+    -- Encontrar o Kitty
+    local kittyModel = nil
+    for _, player in ipairs(workspace.Map.Players:GetChildren()) do
+        local head = player:FindFirstChild("Head")
+        if head and isKittyHead(head) then
+            kittyModel = player
+            break
+        end
+    end
+
+    if not kittyModel then
+        Rayfield:Notify({
+            Title = "Erro",
+            Content = "Kitty não encontrado no mapa!",
+            Duration = 3,
+            Image = 4483362458
+        })
+        return
+    end
+
+    -- Coletar partes não ancoradas
+    local unanchoredParts = {}
+    local function scanFolder(folder)
+        for _, obj in ipairs(folder:GetChildren()) do
+            if obj:IsA("BasePart") and not obj.Anchored then
+                table.insert(unanchoredParts, obj)
+            elseif obj:IsA("Folder") or obj:IsA("Model") then
+                scanFolder(obj) -- Busca recursiva
+            end
+        end
+    end
+
+    scanFolder(workspace) -- Varre toda a workspace
+
+    -- Conectar partes ao Kitty
+    local kittyRoot = kittyModel:FindFirstChild("HumanoidRootPart")
+    if kittyRoot and #unanchoredParts > 0 then
+        for _, part in ipairs(unanchoredParts) do
+            local weld = Instance.new("Weld")
+            weld.Part0 = kittyRoot
+            weld.Part1 = part
+            weld.C0 = CFrame.new(0, 0, 0)
+            weld.Parent = kittyRoot
+        end
+        Rayfield:Notify({
+            Title = "Fling Ativado",
+            Content = (#unanchoredParts .. " partes conectadas ao Kitty!"),
+            Duration = 5,
+            Image = 4483362458
+        })
+    else
+        Rayfield:Notify({
+            Title = "Aviso",
+            Content = "Nenhuma parte não-ancorada encontrada.",
+            Duration = 3,
+            Image = 4483362458
+        })
+    end
+end
+
+-- Botão na TAB Troll
+TrollTab:CreateButton({
+    Name = "Fling Kitty",
+    Callback = function()
+        pcall(flingKittyWithUnanchoredParts)
+    end
+})
+
 -- Load configuration
 Rayfield:LoadConfiguration()
