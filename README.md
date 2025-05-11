@@ -560,9 +560,6 @@ DetectTab:CreateToggle({
     end
 })
 
--- Adicionar nova TAB
-local TrollTab = Window:CreateTab("Troll", 4483362458)
-
 local TrollTab = Window:CreateTab("Troll", 4483362458)
 
 -- Configurações avançadas
