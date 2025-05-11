@@ -563,73 +563,135 @@ DetectTab:CreateToggle({
 -- Adicionar nova TAB
 local TrollTab = Window:CreateTab("Troll", 4483362458)
 
--- Função principal para o Fling
-local function flingKittyWithUnanchoredParts()
-    -- Encontrar o Kitty
-    local kittyModel = nil
-    for _, player in ipairs(workspace.Map.Players:GetChildren()) do
-        local head = player:FindFirstChild("Head")
-        if head and isKittyHead(head) then
-            kittyModel = player
-            break
+local TrollTab = Window:CreateTab("Troll", 4483362458)
+
+-- Configurações avançadas
+local FLING_FORCE = Vector3.new(5000, 5000, 5000)
+local MAX_PARTS = 500 -- Previne crash por excesso de objetos
+
+-- Cache de objetos
+local cache = {
+    targetPart = nil,
+    activeConnections = {},
+    physicsForces = {}
+}
+
+-- Função de busca otimizada
+local function findUnanchoredParts()
+    local parts = {}
+    local count = 0
+    
+    local function scan(o)
+        if count >= MAX_PARTS then return end
+        if o:IsA("BasePart") and not o.Anchored and o.Parent ~= cache.targetPart.Parent then
+            table.insert(parts, o)
+            count = count + 1
+        end
+        for _,child in pairs(o:GetChildren()) do
+            scan(child)
         end
     end
 
-    if not kittyModel then
+    pcall(scan, workspace)
+    return parts
+end
+
+-- Sistema de conexão seguro
+local function createPhysicsConnection(part)
+    local bodyPos = Instance.new("BodyPosition")
+    bodyPos.MaxForce = FLING_FORCE
+    bodyPos.Position = cache.targetPart.Position
+    bodyPos.Parent = part
+
+    local bodyGyro = Instance.new("BodyGyro")
+    bodyGyro.MaxTorque = FLING_FORCE
+    bodyGyro.P = 10000
+    bodyGyro.D = 500
+    bodyGyro.Parent = part
+
+    table.insert(cache.physicsForces, {pos = bodyPos, gyro = bodyGyro, part = part})
+end
+
+-- Sistema de limpeza automática
+local function cleanPreviousConnections()
+    for _, connection in ipairs(cache.physicsForces) do
+        connection.pos:Destroy()
+        connection.gyro:Destroy()
+    end
+    cache.physicsForces = {}
+end
+
+-- Função principal super-otimizada
+local function ultimateFling()
+    -- 1. Localizar alvo
+    cache.targetPart = workspace:FindFirstChild("Map", true)
+        and workspace.Map:FindFirstChild("Players", true)
+        and workspace.Map.Players:FindFirstChild("BOT", true)
+        and workspace.Map.Players.BOT:FindFirstChild("UpperTorso")
+
+    if not cache.targetPart then
         Rayfield:Notify({
-            Title = "Erro",
-            Content = "Kitty não encontrado no mapa!",
+            Title = "Erro Fatal",
+            Content = "BOT/UpperTorso não encontrado!",
+            Duration = 5,
+            Image = 4483362458
+        })
+        return
+    end
+
+    -- 2. Limpeza prévia
+    cleanPreviousConnections()
+
+    -- 3. Coleta de partes
+    local parts = findUnanchoredParts()
+    if #parts == 0 then
+        Rayfield:Notify({
+            Title = "Aviso",
+            Content = "Nenhuma parte solta encontrada!",
             Duration = 3,
             Image = 4483362458
         })
         return
     end
 
-    -- Coletar partes não ancoradas
-    local unanchoredParts = {}
-    local function scanFolder(folder)
-        for _, obj in ipairs(folder:GetChildren()) do
-            if obj:IsA("BasePart") and not obj.Anchored then
-                table.insert(unanchoredParts, obj)
-            elseif obj:IsA("Folder") or obj:IsA("Model") then
-                scanFolder(obj) -- Busca recursiva
+    -- 4. Conexão em lote
+    local successCount = 0
+    for _, part in ipairs(parts) do
+        if part:IsDescendantOf(workspace) then
+            pcall(createPhysicsConnection, part)
+            successCount = successCount + 1
+        end
+    end
+
+    -- 5. Feedback dinâmico
+    Rayfield:Notify({
+        Title = "FLING ULTIMATE",
+        Content = string.format("%d objetos conectados!\nForça: %d", successCount, FLING_FORCE.X),
+        Duration = 5,
+        Image = 4483362458
+    })
+
+    -- 6. Atualização contínua
+    local heartbeatConnection
+    heartbeatConnection = game:GetService("RunService").Heartbeat:Connect(function()
+        if not cache.targetPart or not cache.targetPart.Parent then
+            heartbeatConnection:Disconnect()
+            return
+        end
+
+        for _, connection in ipairs(cache.physicsForces) do
+            if connection.part and connection.pos then
+                connection.pos.Position = cache.targetPart.Position
             end
         end
-    end
-
-    scanFolder(workspace) -- Varre toda a workspace
-
-    -- Conectar partes ao Kitty
-    local kittyRoot = kittyModel:FindFirstChild("HumanoidRootPart")
-    if kittyRoot and #unanchoredParts > 0 then
-        for _, part in ipairs(unanchoredParts) do
-            local weld = Instance.new("Weld")
-            weld.Part0 = kittyRoot
-            weld.Part1 = part
-            weld.C0 = CFrame.new(0, 0, 0)
-            weld.Parent = kittyRoot
-        end
-        Rayfield:Notify({
-            Title = "Fling Ativado",
-            Content = (#unanchoredParts .. " partes conectadas ao Kitty!"),
-            Duration = 5,
-            Image = 4483362458
-        })
-    else
-        Rayfield:Notify({
-            Title = "Aviso",
-            Content = "Nenhuma parte não-ancorada encontrada.",
-            Duration = 3,
-            Image = 4483362458
-        })
-    end
+    end)
 end
 
--- Botão na TAB Troll
+-- Botão principal
 TrollTab:CreateButton({
     Name = "Fling Kitty",
     Callback = function()
-        pcall(flingKittyWithUnanchoredParts)
+        pcall(ultimateFling)
     end
 })
 
