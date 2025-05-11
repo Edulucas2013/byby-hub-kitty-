@@ -560,67 +560,48 @@ DetectTab:CreateToggle({
     end
 })
 
--- byby Hub - Universal Fling Kitty v4.0
+--[[
+  byby Hub - Fling Kitty Ultimate v3.0
+  Modificações:
+  - Ignora completamente o jogador local
+  - Rotação controlada a 1000 RPM
+--]]
+
 local TrollTab = Window:CreateTab("Troll", 4483362458)
 
--- Configurações
+-- Configurações avançadas
 local FLING_FORCE = Vector3.new(5000, 5000, 5000)
 local ROTATION_SPEED = 1000 -- RPM
-local MAX_PARTS = 300
-local UPDATE_RATE = 1/30 -- 30 FPS
+local MAX_PARTS = 500
 
--- Variáveis globais
+-- Cache de objetos
 local cache = {
     targetPart = nil,
-    connections = {},
     physicsForces = {},
-    active = false,
-    localPlayer = game:GetService("Players").LocalPlayer,
-    lastUpdate = 0
+    heartbeatConnection = nil,
+    localPlayer = game:GetService("Players").LocalPlayer
 }
 
--- Funções essenciais
+-- Função para converter RPM para radianos/s
 local function rpmToRadians(rpm)
     return (rpm * math.pi * 2) / 60
 end
 
-local function safeFindTarget()
-    -- Tenta o caminho direto primeiro (singleplayer)
-    local target = workspace:FindFirstChild("Map")
-               and workspace.Map:FindFirstChild("Players")
-               and workspace.Map.Players:FindFirstChild("BOT")
-               and workspace.Map.Players.BOT:FindFirstChild("UpperTorso")
-
-    -- Fallback para busca avançada (multiplayer)
-    if not target then
-        for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
-            if player ~= cache.localPlayer and player.Character then
-                local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-                if humanoid and humanoid.Health <= 0 then continue end
-                
-                local head = player.Character:FindFirstChild("Head")
-                if head and (head.Size - Vector3.new(1.87, 1.82, 1.77)).Magnitude < 0.1 then
-                    target = player.Character:FindFirstChild("UpperTorso")
-                    break
-                end
-            end
-        end
-    end
-    
-    return target
-end
-
+-- Busca segura de partes
 local function findUnanchoredParts()
     local parts = {}
     local count = 0
     
     local function scan(o)
         if count >= MAX_PARTS then return end
-        if o:IsA("BasePart") and not o.Anchored and o.Parent ~= cache.localPlayer.Character then
-            table.insert(parts, o)
-            count = count + 1
+        if o:IsA("BasePart") and not o.Anchored then
+            -- Ignorar partes do jogador local
+            if not o:IsDescendantOf(cache.localPlayer.Character) then
+                table.insert(parts, o)
+                count = count + 1
+            end
         end
-        for _, child in ipairs(o:GetChildren()) do
+        for _,child in pairs(o:GetChildren()) do
             scan(child)
         end
     end
@@ -629,122 +610,112 @@ local function findUnanchoredParts()
     return parts
 end
 
--- Sistema de física
-local function createPhysicsConnection(part)
-    local bodyPos = Instance.new("BodyPosition")
-    bodyPos.MaxForce = FLING_FORCE
-    bodyPos.P = 10000
-    bodyPos.D = 1000
-    bodyPos.Position = cache.targetPart.Position
-    bodyPos.Parent = part
-
+-- Sistema de rotação controlada
+local function createRotationSystem(part)
     local bodyGyro = Instance.new("BodyGyro")
     bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    bodyGyro.CFrame = part.CFrame
     bodyGyro.P = 10000
     bodyGyro.D = rpmToRadians(ROTATION_SPEED)
+    bodyGyro.CFrame = part.CFrame
     bodyGyro.Parent = part
-
-    return {bodyPos = bodyPos, bodyGyro = bodyGyro, part = part}
+    
+    return bodyGyro
 end
 
--- Loop principal
-local function updateFling()
-    if not cache.active or not cache.targetPart or not cache.targetPart.Parent then return end
-
-    local now = tick()
-    if now - cache.lastUpdate < UPDATE_RATE then return end
-    cache.lastUpdate = now
-
-    for _, connection in ipairs(cache.physicsForces) do
-        if connection.part and connection.part.Parent then
-            -- Atualização de posição
-            connection.bodyPos.Position = cache.targetPart.Position
-            
-            -- Atualização de rotação
-            connection.bodyGyro.CFrame = connection.bodyGyro.CFrame * CFrame.Angles(
-                0,
-                rpmToRadians(ROTATION_SPEED) * UPDATE_RATE,
-                0
-            )
+-- Atualização contínua otimizada
+local function updateConnections()
+    if cache.targetPart and cache.targetPart.Parent then
+        for _, connection in ipairs(cache.physicsForces) do
+            if connection.part and connection.part.Parent then
+                -- Atualização de posição
+                connection.bodyPos.Position = cache.targetPart.Position
+                
+                -- Atualização de rotação
+                connection.bodyGyro.CFrame = connection.bodyGyro.CFrame * CFrame.Angles(
+                    0,
+                    rpmToRadians(ROTATION_SPEED) * task.wait(),
+                    0
+                )
+            end
         end
     end
 end
 
--- Controles
-local function startFling()
-    -- Limpeza prévia
+-- Função principal
+local function ultimateFling()
+    -- 1. Localizar alvo
+    cache.targetPart = workspace:FindFirstChild("Map", true)
+        and workspace.Map:FindFirstChild("Players", true)
+        and workspace.Map.Players:FindFirstChild("BOT", true)
+        and workspace.Map.Players.BOT:FindFirstChild("UpperTorso")
+
+    if not cache.targetPart then
+        Rayfield:Notify({
+            Title = "Erro",
+            Content = "Alvo não encontrado!",
+            Duration = 3,
+            Image = 4483362458
+        })
+        return
+    end
+
+    -- 2. Limpar conexões anteriores
     for _, connection in ipairs(cache.physicsForces) do
         connection.bodyPos:Destroy()
         connection.bodyGyro:Destroy()
     end
     cache.physicsForces = {}
 
-    -- Encontrar alvo
-    cache.targetPart = safeFindTarget()
-    if not cache.targetPart then
-        Rayfield:Notify({
-            Title = "Erro",
-            Content = "BOT/UpperTorso não encontrado!",
-            Duration = 3,
-            Image = 4483362458
-        })
-        return false
-    end
-
-    -- Coletar partes
+    -- 3. Coletar partes
     local parts = findUnanchoredParts()
     if #parts == 0 then
         Rayfield:Notify({
             Title = "Aviso",
-            Content = "Nenhuma parte solta encontrada!",
+            Content = "Nenhum objeto válido encontrado!",
             Duration = 3,
             Image = 4483362458
         })
-        return false
+        return
     end
 
-    -- Criar conexões
+    -- 4. Criar sistemas físicos
     for _, part in ipairs(parts) do
         if part:IsDescendantOf(workspace) then
-            table.insert(cache.physicsForces, createPhysicsConnection(part))
+            local bodyPos = Instance.new("BodyPosition")
+            bodyPos.MaxForce = FLING_FORCE
+            bodyPos.Position = cache.targetPart.Position
+            bodyPos.Parent = part
+
+            local bodyGyro = createRotationSystem(part)
+            
+            table.insert(cache.physicsForces, {
+                bodyPos = bodyPos,
+                bodyGyro = bodyGyro,
+                part = part
+            })
         end
     end
 
-    -- Iniciar loop
-    cache.active = true
-    cache.connection = cache.connection or game:GetService("RunService").Heartbeat:Connect(updateFling)
+    -- 5. Iniciar loop de atualização
+    if cache.heartbeatConnection then
+        cache.heartbeatConnection:Disconnect()
+    end
     
+    cache.heartbeatConnection = game:GetService("RunService").Heartbeat:Connect(updateConnections)
+
     Rayfield:Notify({
-        Title = "FLING ATIVADO",
+        Title = "SUCESSO",
         Content = string.format("%d objetos conectados!\nRotação: %d RPM", #cache.physicsForces, ROTATION_SPEED),
         Duration = 5,
         Image = 4483362458
     })
-    return true
 end
 
-local function stopFling()
-    cache.active = false
-    if cache.connection then
-        cache.connection:Disconnect()
-        cache.connection = nil
-    end
-end
-
--- Interface
-TrollTab:CreateToggle({
-    Name = "Fling Kitty",
-    CurrentValue = false,
-    Callback = function(value)
-        if value then
-            if not startFling() then
-                -- Reverte o toggle se falhar
-                return false
-            end
-        else
-            stopFling()
-        end
+-- Botão principal
+TrollTab:CreateButton({
+    Name = "Fling Kitty (WORKS JUST ON 1 PLAYER)",
+    Callback = function()
+        pcall(ultimateFling)
     end
 })
 
