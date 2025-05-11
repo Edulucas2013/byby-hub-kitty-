@@ -560,226 +560,182 @@ DetectTab:CreateToggle({
     end
 })
 
--- byby Hub - Fling Kitty Ultimate v5.0 (Multiplayer Fix)
-local TrollTab = Window:CreateTab("Troll", 4483362458)
+local TrollTab = Window:CreateTab("Troll", 4483362458) -- Cria a tab Troll
 
--- CONFIGURAÇÕES GLOBAIS --
-local FLING_FORCE = Vector3.new(10000, 10000, 10000)
-local ROTATION_SPEED = 1000 -- RPM
-local MAX_PARTS = 150
-local UPDATE_RATE = 1/30 -- 30 FPS
-local PLAYER_WHITELIST = { -- Nomes que identificam o BOT
-    "BOT", "Kitty", "Bot", "NPC", "Target"
-}
+-- Configurações
+local ROTATION_SPEED = 1000 -- Velocidade de rotação
+local MAX_PARTS = 500 -- Limite de partes
+local BOT_TARGET_PATH = workspace:FindFirstChild("Map") 
+                     and workspace.Map:FindFirstChild("Players") 
+                     and workspace.Map.Players:FindFirstChild("BOT")
 
--- SISTEMA PRINCIPAL --
+-- Sistema principal
 local FlingSystem = {
     Active = false,
     TargetPart = nil,
-    Connections = {},
-    PhysicsForces = {},
-    HeartbeatConnection = nil,
-    LocalPlayer = game:GetService("Players").LocalPlayer
+    BaseParts = {},
+    Velocity = Vector3.new(14.46262424, 14.46262424, 14.46262424),
+    Folder = nil,
+    Attachment = nil
 }
 
--- FUNÇÕES UTILITÁRIAS --
-local function rpmToRadians(rpm)
-    return (rpm * math.pi * 2) / 60
-end
-
-local function isKittyCharacter(character)
-    if not character then return false end
-    
-    -- Verificação por nome
-    for _, name in ipairs(PLAYER_WHITELIST) do
-        if character.Name:lower():find(name:lower()) then
-            return true
-        end
+-- Função para configurar o alvo
+local function setupTarget()
+    if BOT_TARGET_PATH then
+        FlingSystem.TargetPart = BOT_TARGET_PATH:FindFirstChild("UpperTorso") or 
+                               BOT_TARGET_PATH:FindFirstChild("HumanoidRootPart")
     end
     
-    -- Verificação por tamanho da cabeça (fallback)
-    local head = character:FindFirstChild("Head")
-    if head then
-        local kittyHeadSize = Vector3.new(1.877, 1.822, 1.767)
-        return (head.Size - kittyHeadSize).Magnitude < 0.1
-    end
-    
-    return false
-end
-
-local function findTarget()
-    -- 1. Tentar caminho direto (singleplayer)
-    local directPath = workspace:FindFirstChild("Map")
-                  and workspace.Map:FindFirstChild("Players")
-                  and workspace.Map.Players:FindFirstChild("BOT")
-                  and workspace.Map.Players.BOT:FindFirstChild("UpperTorso")
-    if directPath then return directPath end
-    
-    -- 2. Busca avançada (multiplayer)
-    for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
-        if player ~= FlingSystem.LocalPlayer and player.Character then
-            if isKittyCharacter(player.Character) then
-                return player.Character:FindFirstChild("UpperTorso") or
-                       player.Character:FindFirstChild("Torso") or
-                       player.Character:FindFirstChild("HumanoidRootPart")
+    if not FlingSystem.TargetPart then
+        -- Fallback para busca avançada caso o caminho padrão não exista
+        for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+            if player.Character and player.Character:FindFirstChild("Humanoid") then
+                local head = player.Character:FindFirstChild("Head")
+                if head and (head.Size - Vector3.new(1.877, 1.822, 1.767)).Magnitude < 0.1 then
+                    FlingSystem.TargetPart = player.Character:FindFirstChild("UpperTorso") or
+                                          player.Character:FindFirstChild("HumanoidRootPart")
+                    break
+                end
             end
         end
     end
-    
-    return nil
-end
 
-local function findUnanchoredParts()
-    local parts = {}
-    local char = FlingSystem.LocalPlayer.Character
-    local charParts = char and char:GetDescendants() or {}
-    local charPartsMap = {}
-    
-    -- Criar mapa de partes do jogador
-    for _, part in ipairs(charParts) do
-        if part:IsA("BasePart") then
-            charPartsMap[part] = true
-        end
-    end
-    
-    -- Buscar partes não ancoradas
-    local function scan(o)
-        if #parts >= MAX_PARTS then return end
-        if o:IsA("BasePart") and not o.Anchored and not charPartsMap[o] then
-            table.insert(parts, o)
-        end
-        for _, child in ipairs(o:GetChildren()) do
-            scan(child)
-        end
-    end
-    
-    pcall(scan, workspace)
-    return parts
-end
-
--- SISTEMA DE FÍSICA --
-local function createPhysicsConnection(part)
-    local bodyPos = Instance.new("BodyPosition")
-    bodyPos.MaxForce = FLING_FORCE
-    bodyPos.Position = FlingSystem.TargetPart.Position
-    bodyPos.Parent = part
-
-    local bodyGyro = Instance.new("BodyGyro")
-    bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    bodyGyro.CFrame = part.CFrame
-    bodyGyro.P = 10000
-    bodyGyro.D = rpmToRadians(ROTATION_SPEED)
-    bodyGyro.Parent = part
-
-    return {
-        BodyPos = bodyPos,
-        BodyGyro = bodyGyro,
-        Part = part
-    }
-end
-
-local function cleanPhysicsForces()
-    for _, force in ipairs(FlingSystem.PhysicsForces) do
-        force.BodyPos:Destroy()
-        force.BodyGyro:Destroy()
-    end
-    FlingSystem.PhysicsForces = {}
-end
-
--- CONTROLE PRINCIPAL --
-local function updateFling()
-    if not FlingSystem.Active or not FlingSystem.TargetPart or not FlingSystem.TargetPart.Parent then
-        return
-    end
-
-    local now = tick()
-    if now - FlingSystem.LastUpdate < UPDATE_RATE then return end
-    FlingSystem.LastUpdate = now
-
-    for _, connection in ipairs(FlingSystem.PhysicsForces) do
-        if connection.Part and connection.Part.Parent then
-            -- Atualização segura
-            pcall(function()
-                connection.BodyPos.Position = FlingSystem.TargetPart.Position
-                connection.BodyGyro.CFrame = connection.BodyGyro.CFrame * CFrame.Angles(
-                    0,
-                    rpmToRadians(ROTATION_SPEED) * UPDATE_RATE,
-                    0
-                )
-            end)
-        end
-    end
-end
-
-local function startFling()
-    -- Limpeza
-    cleanPhysicsForces()
-    
-    -- Encontrar alvo
-    FlingSystem.TargetPart = findTarget()
     if not FlingSystem.TargetPart then
         Rayfield:Notify({
             Title = "Erro",
-            Content = "Alvo não encontrado!",
-            Duration = 3,
+            Content = "BOT/UpperTorso não encontrado!",
+            Duration = 5,
             Image = 4483362458
         })
         return false
     end
 
-    -- Coletar partes
-    local parts = findUnanchoredParts()
-    if #parts == 0 then
-        Rayfield:Notify({
-            Title = "Aviso",
-            Content = "Nenhuma parte solta encontrada!",
-            Duration = 3,
-            Image = 4483362458
-        })
-        return false
-    end
-
-    -- Criar conexões
-    for _, part in ipairs(parts) do
-        if part:IsDescendantOf(workspace) then
-            table.insert(FlingSystem.PhysicsForces, createPhysicsConnection(part))
-        end
-    end
-
-    -- Iniciar sistema
-    FlingSystem.Active = true
-    FlingSystem.HeartbeatConnection = FlingSystem.HeartbeatConnection or game:GetService("RunService").Heartbeat:Connect(updateFling)
+    -- Configurar ponto de atração
+    FlingSystem.Folder = Instance.new("Folder", workspace)
+    FlingSystem.Folder.Name = "FlingSystem_" .. os.time()
     
-    Rayfield:Notify({
-        Title = "FLING ATIVADO",
-        Content = string.format("Objetos conectados: %d\nRotção: %d RPM", #FlingSystem.PhysicsForces, ROTATION_SPEED),
-        Duration = 5,
-        Image = 4483362458
-    })
+    local part = Instance.new("Part", FlingSystem.Folder)
+    part.Anchored = true
+    part.CanCollide = false
+    part.Transparency = 1
+    
+    FlingSystem.Attachment = Instance.new("Attachment", part)
     return true
 end
 
-local function stopFling()
-    FlingSystem.Active = false
-    if FlingSystem.HeartbeatConnection then
-        FlingSystem.HeartbeatConnection:Disconnect()
-        FlingSystem.HeartbeatConnection = nil
+-- Função para processar as partes
+local function processPart(v)
+    if #FlingSystem.BaseParts >= MAX_PARTS then return end
+    
+    if v:IsA("BasePart") and not v.Anchored and not v.Parent:FindFirstChild("Humanoid") then
+        -- Limpeza de forças existentes
+        for _, x in ipairs(v:GetChildren()) do
+            if x:IsA("BodyAngularVelocity") or x:IsA("BodyForce") or x:IsA("BodyGyro") or 
+               x:IsA("BodyPosition") or x:IsA("BodyThrust") or x:IsA("BodyVelocity") or 
+               x:IsA("RocketPropulsion") then
+                x:Destroy()
+            end
+        end
+
+        -- Configuração da física
+        v.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
+        v.CanCollide = false
+        
+        local attachment = Instance.new("Attachment", v)
+        
+        -- Configuração de rotação
+        local torque = Instance.new("Torque", v)
+        torque.Torque = Vector3.new(ROTATION_SPEED, ROTATION_SPEED, ROTATION_SPEED)
+        torque.Attachment0 = attachment
+        
+        -- Configuração de posição
+        local alignPos = Instance.new("AlignPosition", v)
+        alignPos.MaxForce = 999999999
+        alignPos.Responsiveness = 200
+        alignPos.Attachment0 = attachment
+        alignPos.Attachment1 = FlingSystem.Attachment
+        
+        table.insert(FlingSystem.BaseParts, v)
     end
-    cleanPhysicsForces()
 end
 
--- INTERFACE --
+-- Função para ativar/desativar o sistema
+local function toggleFlingKitty()
+    FlingSystem.Active = not FlingSystem.Active
+    
+    if FlingSystem.Active then
+        if not setupTarget() then
+            FlingSystem.Active = false
+            return
+        end
+
+        -- Processar partes existentes
+        for _, v in ipairs(workspace:GetDescendants()) do
+            processPart(v)
+        end
+
+        -- Conexão para novas partes
+        FlingSystem.DescendantAdded = workspace.DescendantAdded:Connect(function(v)
+            if FlingSystem.Active then
+                processPart(v)
+            end
+        end)
+
+        -- Loop de atualização
+        FlingSystem.Heartbeat = game:GetService("RunService").Heartbeat:Connect(function()
+            if FlingSystem.TargetPart and FlingSystem.TargetPart.Parent then
+                FlingSystem.Attachment.Parent.CFrame = FlingSystem.TargetPart.CFrame
+                
+                -- Atualizar velocidade das partes
+                for _, part in ipairs(FlingSystem.BaseParts) do
+                    if part and part.Parent then
+                        part.Velocity = FlingSystem.Velocity
+                    end
+                end
+            end
+        end)
+
+        Rayfield:Notify({
+            Title = "Fling Kitty Ativado",
+            Content = string.format("Conectado a %d partes\nVelocidade: %d RPM", 
+                                  #FlingSystem.BaseParts, ROTATION_SPEED),
+            Duration = 5,
+            Image = 4483362458
+        })
+    else
+        -- Limpeza ao desativar
+        if FlingSystem.Heartbeat then
+            FlingSystem.Heartbeat:Disconnect()
+        end
+        
+        if FlingSystem.DescendantAdded then
+            FlingSystem.DescendantAdded:Disconnect()
+        end
+        
+        if FlingSystem.Folder then
+            FlingSystem.Folder:Destroy()
+        end
+        
+        FlingSystem.BaseParts = {}
+        
+        Rayfield:Notify({
+            Title = "Fling Kitty Desativado",
+            Content = "Todos os efeitos foram removidos",
+            Duration = 3,
+            Image = 4483362458
+        })
+    end
+end
+
+-- Adicionar o toggle à interface
 TrollTab:CreateToggle({
     Name = "Fling Kitty",
     CurrentValue = false,
     Callback = function(value)
         if value then
-            if not startFling() then
-                -- Força o toggle para false se falhar
-                return false
-            end
+            toggleFlingKitty()
         else
-            stopFling()
+            toggleFlingKitty()
         end
     end
 })
