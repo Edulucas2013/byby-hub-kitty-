@@ -902,5 +902,80 @@ PartyTab:CreateButton({
     end
 })
 
+-- Adicionar dentro da Party Tab
+PartyTab:CreateToggle({
+    Name = "Color Cheese: Freeze Player",
+    CurrentValue = false,
+    Callback = function(enabled)
+        if enabled then
+            -- Congelar o jogador
+            local player = game:GetService("Players").LocalPlayer
+            if player.Character then
+                local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                local root = player:FindFirstChild("HumanoidRootPart")
+                
+                if root then
+                    -- Criar forças físicas
+                    getgenv().freezeBodyPos = Instance.new("BodyPosition")
+                    getgenv().freezeBodyGyro = Instance.new("BodyGyro")
+                    
+                    -- Configurar BodyPosition
+                    freezeBodyPos.Position = root.Position
+                    freezeBodyPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                    freezeBodyPos.P = 10000
+                    freezeBodyPos.D = 1000
+                    freezeBodyPos.Parent = root
+                    
+                    -- Configurar BodyGyro
+                    freezeBodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                    freezeBodyGyro.CFrame = root.CFrame
+                    freezeBodyGyro.P = 10000
+                    freezeBodyGyro.D = 1000
+                    freezeBodyGyro.Parent = root
+                    
+                    -- Desativar movimentos
+                    if humanoid then
+                        humanoid.PlatformStand = true
+                    end
+                end
+                
+                Rayfield:Notify({
+                    Title = "Jogador Congelado",
+                    Content = "Seu personagem está imóvel!",
+                    Duration = 3,
+                    Image = 4483362458
+                })
+            end
+        else
+            -- Remover congelamento
+            local player = game:GetService("Players").LocalPlayer
+            if player.Character then
+                local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                local root = player:FindFirstChild("HumanoidRootPart")
+                
+                if root then
+                    -- Remover forças físicas
+                    if freezeBodyPos then
+                        freezeBodyPos:Destroy()
+                        freezeBodyGyro:Destroy()
+                    end
+                    
+                    -- Restaurar movimentos
+                    if humanoid then
+                        humanoid.PlatformStand = false
+                    end
+                end
+                
+                Rayfield:Notify({
+                    Title = "Congelamento Removido",
+                    Content = "Movimento liberado!",
+                    Duration = 3,
+                    Image = 4483362458
+                })
+            end
+        end
+    end
+})
+
 -- Load configuration
 Rayfield:LoadConfiguration()
