@@ -15,8 +15,8 @@ end
 -- Main Window
 local Window = Rayfield:CreateWindow({
     Name = "byby Hub",
-    LoadingTitle = "byby Hub - ESP & TP Menu",
-    LoadingSubtitle = "by Rayfield & Lua Assistant",
+    LoadingTitle = "byby Hub - Kitty Script",
+    LoadingSubtitle = "by Edulucas2013",
     ConfigurationSaving = {
         Enabled = false,
         FolderName = "bybyHubConfigs",
@@ -904,7 +904,7 @@ PartyTab:CreateButton({
 
 -- Adicionar dentro da Party Tab
 PartyTab:CreateToggle({
-    Name = "Coloer Cheese: Win",
+    Name = "Color Cheese: Win",
     CurrentValue = false,
     Callback = function(enabled)
         local player = game:GetService("Players").LocalPlayer
