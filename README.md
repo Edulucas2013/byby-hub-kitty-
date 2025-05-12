@@ -904,71 +904,72 @@ PartyTab:CreateButton({
 
 -- Adicionar dentro da Party Tab
 PartyTab:CreateToggle({
-    Name = "Color Cheese: Freeze Player",
+    Name = "Freeze BOTFAIT (3rd Part)",
     CurrentValue = false,
     Callback = function(enabled)
         if enabled then
-            -- Congelar o jogador
-            local player = game:GetService("Players").LocalPlayer
-            if player.Character then
-                local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-                local root = player:FindFirstChild("HumanoidRootPart")
-                
-                if root then
-                    -- Criar forças físicas
-                    getgenv().freezeBodyPos = Instance.new("BodyPosition")
-                    getgenv().freezeBodyGyro = Instance.new("BodyGyro")
-                    
-                    -- Configurar BodyPosition
-                    freezeBodyPos.Position = root.Position
-                    freezeBodyPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                    freezeBodyPos.P = 10000
-                    freezeBodyPos.D = 1000
-                    freezeBodyPos.Parent = root
-                    
-                    -- Configurar BodyGyro
-                    freezeBodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-                    freezeBodyGyro.CFrame = root.CFrame
-                    freezeBodyGyro.P = 10000
-                    freezeBodyGyro.D = 1000
-                    freezeBodyGyro.Parent = root
-                    
-                    -- Desativar movimentos
-                    if humanoid then
-                        humanoid.PlatformStand = true
+            -- Encontrar a terceira part do caminho
+            local target = workspace.Map.Players:FindFirstChild("BOTFAIT")
+            if target then
+                local avatar = target:FindFirstChild("Avatar")
+                if avatar then
+                    local parts = avatar:FindFirstChild("Part"):GetChildren()
+                    if #parts >= 3 then
+                        local thirdPart = parts[3]
+                        
+                        -- Criar forças de congelamento
+                        getgenv().botFreeze = {
+                            BodyPos = Instance.new("BodyPosition"),
+                            BodyGyro = Instance.new("BodyGyro")
+                        }
+                        
+                        -- Configurar BodyPosition
+                        botFreeze.BodyPos.Position = thirdPart.Position
+                        botFreeze.BodyPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                        botFreeze.BodyPos.P = 10000
+                        botFreeze.BodyPos.D = 1000
+                        botFreeze.BodyPos.Parent = thirdPart
+                        
+                        -- Configurar BodyGyro
+                        botFreeze.BodyGyro.CFrame = thirdPart.CFrame
+                        botFreeze.BodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                        botFreeze.BodyGyro.P = 10000
+                        botFreeze.BodyGyro.D = 1000
+                        botFreeze.BodyGyro.Parent = thirdPart
+                        
+                        Rayfield:Notify({
+                            Title = "BOT Congelado",
+                            Content = "3ª Part travada com sucesso!",
+                            Duration = 3,
+                            Image = 4483362458
+                        })
+                    else
+                        Rayfield:Notify({
+                            Title = "Erro",
+                            Content = "Não há partes suficientes!",
+                            Duration = 3,
+                            Image = 4483362458
+                        })
                     end
                 end
-                
+            else
                 Rayfield:Notify({
-                    Title = "Jogador Congelado",
-                    Content = "Seu personagem está imóvel!",
+                    Title = "BOT Não Encontrado",
+                    Content = "Caminho: Map/Players/BOTFAIT",
                     Duration = 3,
                     Image = 4483362458
                 })
             end
         else
             -- Remover congelamento
-            local player = game:GetService("Players").LocalPlayer
-            if player.Character then
-                local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-                local root = player:FindFirstChild("HumanoidRootPart")
-                
-                if root then
-                    -- Remover forças físicas
-                    if freezeBodyPos then
-                        freezeBodyPos:Destroy()
-                        freezeBodyGyro:Destroy()
-                    end
-                    
-                    -- Restaurar movimentos
-                    if humanoid then
-                        humanoid.PlatformStand = false
-                    end
-                end
+            if getgenv().botFreeze then
+                botFreeze.BodyPos:Destroy()
+                botFreeze.BodyGyro:Destroy()
+                getgenv().botFreeze = nil
                 
                 Rayfield:Notify({
-                    Title = "Congelamento Removido",
-                    Content = "Movimento liberado!",
+                    Title = "BOT Liberado",
+                    Content = "3ª Part descongelada!",
                     Duration = 3,
                     Image = 4483362458
                 })
