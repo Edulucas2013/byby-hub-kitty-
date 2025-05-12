@@ -904,76 +904,90 @@ PartyTab:CreateButton({
 
 -- Adicionar dentro da Party Tab
 PartyTab:CreateToggle({
-    Name = "Freeze BOTFAIT (3rd Part)",
+    Name = "Color CHeese: Win",
     CurrentValue = false,
     Callback = function(enabled)
-        if enabled then
-            -- Encontrar a terceira part do caminho
-            local target = workspace.Map.Players:FindFirstChild("BOTFAIT")
-            if target then
-                local avatar = target:FindFirstChild("Avatar")
-                if avatar then
-                    local parts = avatar:FindFirstChild("Part"):GetChildren()
-                    if #parts >= 3 then
-                        local thirdPart = parts[3]
-                        
-                        -- Criar forças de congelamento
-                        getgenv().botFreeze = {
-                            BodyPos = Instance.new("BodyPosition"),
-                            BodyGyro = Instance.new("BodyGyro")
-                        }
-                        
-                        -- Configurar BodyPosition
-                        botFreeze.BodyPos.Position = thirdPart.Position
-                        botFreeze.BodyPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                        botFreeze.BodyPos.P = 10000
-                        botFreeze.BodyPos.D = 1000
-                        botFreeze.BodyPos.Parent = thirdPart
-                        
-                        -- Configurar BodyGyro
-                        botFreeze.BodyGyro.CFrame = thirdPart.CFrame
-                        botFreeze.BodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-                        botFreeze.BodyGyro.P = 10000
-                        botFreeze.BodyGyro.D = 1000
-                        botFreeze.BodyGyro.Parent = thirdPart
-                        
-                        Rayfield:Notify({
-                            Title = "BOT Congelado",
-                            Content = "3ª Part travada com sucesso!",
-                            Duration = 3,
-                            Image = 4483362458
-                        })
-                    else
-                        Rayfield:Notify({
-                            Title = "Erro",
-                            Content = "Não há partes suficientes!",
-                            Duration = 3,
-                            Image = 4483362458
-                        })
-                    end
+        local player = game:GetService("Players").LocalPlayer
+        local conn = nil
+        
+        -- Função aprimorada de congelamento
+        local function applyFreeze(character)
+            if character:FindFirstChild("HumanoidRootPart") then
+                -- Remover congelamento anterior
+                if getgenv().freezeParts then
+                    getgenv().freezeParts:Destroy()
                 end
-            else
-                Rayfield:Notify({
-                    Title = "BOT Não Encontrado",
-                    Content = "Caminho: Map/Players/BOTFAIT",
-                    Duration = 3,
-                    Image = 4483362458
-                })
+                
+                -- Criar novo sistema de força
+                getgenv().freezeParts = Instance.new("Folder")
+                local root = character.HumanoidRootPart
+                
+                -- Configurar BodyPosition
+                local bodyPos = Instance.new("BodyPosition")
+                bodyPos.Position = root.Position
+                bodyPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                bodyPos.P = 15000
+                bodyPos.D = 2000
+                bodyPos.Parent = getgenv().freezeParts
+                
+                -- Configurar BodyGyro
+                local bodyGyro = Instance.new("BodyGyro")
+                bodyGyro.CFrame = root.CFrame
+                bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                bodyGyro.P = 15000
+                bodyGyro.D = 2000
+                bodyGyro.Parent = getgenv().freezeParts
+                
+                -- Aplicar às partes
+                bodyPos.Parent = root
+                bodyGyro.Parent = root
+                
+                -- Congelar animações
+                if character:FindFirstChildOfClass("Humanoid") then
+                    character.Humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+                end
             end
+        end
+
+        if enabled then
+            -- Aplicar imediatamente
+            if player.Character then
+                applyFreeze(player.Character)
+            end
+            
+            -- Monitorar respawn
+            conn = player.CharacterAdded:Connect(function(newChar)
+                applyFreeze(newChar)
+            end)
+            
+            Rayfield:Notify({
+                Title = "Modo Estátua Ativo",
+                Content = "Movimento totalmente bloqueado!",
+                Duration = 3,
+                Image = 4483362458
+            })
+            
+            getgenv().freezeConnection = conn
         else
             -- Remover congelamento
-            if getgenv().botFreeze then
-                botFreeze.BodyPos:Destroy()
-                botFreeze.BodyGyro:Destroy()
-                getgenv().botFreeze = nil
-                
-                Rayfield:Notify({
-                    Title = "BOT Liberado",
-                    Content = "3ª Part descongelada!",
-                    Duration = 3,
-                    Image = 4483362458
-                })
+            if getgenv().freezeParts then
+                getgenv().freezeParts:Destroy()
             end
+            if conn then
+                conn:Disconnect()
+            end
+            
+            -- Restaurar movimento
+            if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+                player.Character.Humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+            end
+            
+            Rayfield:Notify({
+                Title = "Congelamento Removido",
+                Content = "Movimento normal restaurado!",
+                Duration = 3,
+                Image = 4483362458
+            })
         end
     end
 })
