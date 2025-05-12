@@ -1010,5 +1010,64 @@ PartyTab:CreateToggle({
     end
 })
 
+PartyTab:CreateButton({
+    Name = "Tower: Win",
+    Callback = function()
+        local targetPath = {"Map", "Race Tower", "Towers", "Finish1", "Obby"}
+        local currentFolder = workspace
+        
+        -- Navegar até a pasta Obby
+        for _, folderName in ipairs(targetPath) do
+            currentFolder = currentFolder:FindFirstChild(folderName)
+            if not currentFolder then break end
+        end
+
+        -- Verificar se encontramos a Obby
+        if not currentFolder then
+            Rayfield:Notify({
+                Title = "Erro",
+                Content = "Caminho da torre não encontrado!",
+                Duration = 3,
+                Image = 4483362458
+            })
+            return
+        end
+
+        -- Procurar a 4ª Part
+        local targetPart
+        local partCounter = 0
+        for _, child in ipairs(currentFolder:GetChildren()) do
+            if child:IsA("Part") and child.Name == "Part" then
+                partCounter = partCounter + 1
+                if partCounter == 4 then
+                    targetPart = child
+                    break
+                end
+            end
+        end
+
+        -- Teleportar se encontrado
+        if targetPart then
+            local plr = game.Players.LocalPlayer
+            if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                plr.Character.HumanoidRootPart.CFrame = targetPart.CFrame + Vector3.new(0, 3, 0)
+                Rayfield:Notify({
+                    Title = "Sucesso!",
+                    Content = "Teleportado para o topo da torre!",
+                    Duration = 3,
+                    Image = 4483362458
+                })
+            end
+        else
+            Rayfield:Notify({
+                Title = "Erro",
+                Content = "Parte #4 não encontrada na Obby!",
+                Duration = 3,
+                Image = 4483362458
+            })
+        end
+    end
+})
+
 -- Load configuration
 Rayfield:LoadConfiguration()
