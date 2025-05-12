@@ -904,48 +904,72 @@ PartyTab:CreateButton({
 
 -- Adicionar dentro da Party Tab
 PartyTab:CreateToggle({
-    Name = "Color CHeese: Win",
+    Name = "Coloer Cheese: Win",
     CurrentValue = false,
     Callback = function(enabled)
         local player = game:GetService("Players").LocalPlayer
         local conn = nil
         
-        -- Função aprimorada de congelamento
+        -- Tabela para armazenar as instâncias
+        if not getgenv().freezeSystem then
+            getgenv().freezeSystem = {
+                parts = {},
+                connections = {}
+            }
+        end
+
+        local function destroyFreeze()
+            -- Remover todas as instâncias físicas
+            for _, part in pairs(getgenv().freezeSystem.parts) do
+                if part.BodyPos then part.BodyPos:Destroy() end
+                if part.BodyGyro then part.BodyGyro:Destroy() end
+            end
+            
+            -- Resetar sistema
+            getgenv().freezeSystem = {
+                parts = {},
+                connections = {}
+            }
+            
+            -- Restaurar movimentos
+            if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+                player.Character.Humanoid.PlatformStand = false
+                player.Character.Humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+            end
+        end
+
         local function applyFreeze(character)
+            destroyFreeze() -- Limpar qualquer congelamento anterior
+            
             if character:FindFirstChild("HumanoidRootPart") then
-                -- Remover congelamento anterior
-                if getgenv().freezeParts then
-                    getgenv().freezeParts:Destroy()
-                end
-                
-                -- Criar novo sistema de força
-                getgenv().freezeParts = Instance.new("Folder")
                 local root = character.HumanoidRootPart
                 
+                -- Criar novas instâncias
+                local newBodyPos = Instance.new("BodyPosition")
+                local newBodyGyro = Instance.new("BodyGyro")
+                
                 -- Configurar BodyPosition
-                local bodyPos = Instance.new("BodyPosition")
-                bodyPos.Position = root.Position
-                bodyPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                bodyPos.P = 15000
-                bodyPos.D = 2000
-                bodyPos.Parent = getgenv().freezeParts
+                newBodyPos.Position = root.Position
+                newBodyPos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                newBodyPos.P = 15000
+                newBodyPos.D = 2000
+                newBodyPos.Parent = root
                 
                 -- Configurar BodyGyro
-                local bodyGyro = Instance.new("BodyGyro")
-                bodyGyro.CFrame = root.CFrame
-                bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-                bodyGyro.P = 15000
-                bodyGyro.D = 2000
-                bodyGyro.Parent = getgenv().freezeParts
+                newBodyGyro.CFrame = root.CFrame
+                newBodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                newBodyGyro.P = 15000
+                newBodyGyro.D = 2000
+                newBodyGyro.Parent = root
                 
-                -- Aplicar às partes
-                bodyPos.Parent = root
-                bodyGyro.Parent = root
+                -- Armazenar referências
+                table.insert(getgenv().freezeSystem.parts, {
+                    BodyPos = newBodyPos,
+                    BodyGyro = newBodyGyro
+                })
                 
                 -- Congelar animações
-                if character:FindFirstChildOfClass("Humanoid") then
-                    character.Humanoid:ChangeState(Enum.HumanoidStateType.Physics)
-                end
+                character.Humanoid.PlatformStand = true
             end
         end
 
@@ -959,32 +983,26 @@ PartyTab:CreateToggle({
             conn = player.CharacterAdded:Connect(function(newChar)
                 applyFreeze(newChar)
             end)
+            table.insert(getgenv().freezeSystem.connections, conn)
             
             Rayfield:Notify({
-                Title = "Modo Estátua Ativo",
+                Title = "Congelamento Ativo",
                 Content = "Movimento totalmente bloqueado!",
                 Duration = 3,
                 Image = 4483362458
             })
-            
-            getgenv().freezeConnection = conn
         else
-            -- Remover congelamento
-            if getgenv().freezeParts then
-                getgenv().freezeParts:Destroy()
-            end
-            if conn then
-                conn:Disconnect()
-            end
+            -- Desativar sistema
+            destroyFreeze()
             
-            -- Restaurar movimento
-            if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
-                player.Character.Humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+            -- Remover conexões
+            for _, c in pairs(getgenv().freezeSystem.connections) do
+                c:Disconnect()
             end
             
             Rayfield:Notify({
-                Title = "Congelamento Removido",
-                Content = "Movimento normal restaurado!",
+                Title = "Sistema Desligado",
+                Content = "Movimento restaurado com sucesso!",
                 Duration = 3,
                 Image = 4483362458
             })
